@@ -1,0 +1,160 @@
+name: AI Security Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      # === Vision One ===
+      vision_one_api_key:
+        description: 'Vision One API Key (TMAS authentication)'
+        required: true
+        type: string
+
+      vision_one_region:
+        description: 'Vision One Region'
+        required: true
+        type: choice
+        default: 'eu-central-1'
+        options:
+          - 'us-east-1'
+          - 'eu-central-1'
+          - 'ap-southeast-2'
+          - 'ap-south-1'
+          - 'ap-northeast-1'
+          - 'ap-southeast-1'
+          - 'me-central-1'
+
+      # === LLM Endpoint ===
+      llm_endpoint:
+        description: 'LLM API endpoint URL (e.g. https://api.openai.com/v1/chat/completions)'
+        required: true
+        type: string
+        default: 'https://api.openai.com/v1/chat/completions'
+
+      llm_api_key:
+        description: 'API key for the LLM endpoint'
+        required: true
+        type: string
+
+      llm_model:
+        description: 'Model name (e.g. gpt-4, gpt-4o, claude-3-opus, llama3)'
+        required: true
+        type: string
+        default: 'gpt-4'
+
+      # === Scan Settings ===
+      attack_preset:
+        description: 'Attack preset to use'
+        required: true
+        type: choice
+        default: 'owasp'
+        options:
+          - 'owasp'
+          - 'mitre'
+
+      system_prompt:
+        description: '(Optional) System prompt to test against'
+        required: false
+        type: string
+
+jobs:
+  ai-security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Install TMAS CLI
+      run: |
+        echo "Downloading TMAS CLI (latest)..."
+        curl -sL https://cli.artifactscan.cloudone.trendmicro.com/tmas-cli/linux/x86_64/latest/tmas -o tmas
+        chmod +x tmas
+        echo "TMAS version:"
+        ./tmas version
+
+    - name: Generate scan configuration
+      env:
+        LLM_ENDPOINT: ${{ inputs.llm_endpoint }}
+        LLM_API_KEY: ${{ inputs.llm_api_key }}
+        LLM_MODEL: ${{ inputs.llm_model }}
+        ATTACK_PRESET: ${{ inputs.attack_preset }}
+        SYSTEM_PROMPT: ${{ inputs.system_prompt }}
+      run: |
+        python scripts/generate_config.py \
+          --endpoint "$LLM_ENDPOINT" \
+          --llm-api-key "$LLM_API_KEY" \
+          --model "$LLM_MODEL" \
+          --preset "$ATTACK_PRESET" \
+          --system-prompt "$SYSTEM_PROMPT" \
+          --output config.yaml
+
+        echo "Generated config (keys redacted):"
+        sed 's/api_key:.*/api_key: ***REDACTED***/' config.yaml
+
+    - name: Run AI security scan
+      env:
+        TMAS_API_KEY: ${{ inputs.vision_one_api_key }}
+      run: |
+        python scripts/run_scan.py \
+          --config config.yaml \
+          --region "${{ inputs.vision_one_region }}" \
+          --tmas-api-key "$TMAS_API_KEY" \
+          --output-dir results \
+          --verbose
+      continue-on-error: true
+
+    - name: Upload scan results
+      if: always()
+      id: upload-results
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-security-scan-results
+        path: results/
+        retention-days: 30
+
+    - name: Generate job summary
+      if: always()
+      run: |
+        echo "## AI Security Scan Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Scan Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
+        echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+        echo "| **Endpoint** | \`${{ inputs.llm_endpoint }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Model** | \`${{ inputs.llm_model }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Attack Preset** | \`${{ inputs.attack_preset }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Region** | \`${{ inputs.vision_one_region }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        if [ -f results/latest.json ]; then
+          echo "### Results Summary" >> $GITHUB_STEP_SUMMARY
+          EXIT_CODE=$(python3 -c "import json; d=json.load(open('results/latest.json')); print(d.get('exit_code','N/A'))")
+          FINDINGS=$(python3 -c "import json; d=json.load(open('results/latest.json')); print(len(d.get('findings',[])))")
+          echo "- **Exit Code:** \`${EXIT_CODE}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Findings:** ${FINDINGS}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+
+        echo "### Download Results" >> $GITHUB_STEP_SUMMARY
+        echo "1. **[Download artifacts](${{ steps.upload-results.outputs.artifact-url }})**" >> $GITHUB_STEP_SUMMARY
+        echo "2. Or go to [this run's artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Artifacts include:**" >> $GITHUB_STEP_SUMMARY
+        echo "- \`latest.json\` - Machine-readable scan results" >> $GITHUB_STEP_SUMMARY
+        echo "- \`latest.html\` - Styled HTML report (open in browser)" >> $GITHUB_STEP_SUMMARY
+        echo "- Timestamped copies of both for historical tracking" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "*Powered by [Trend Micro Vision One](https://www.trendmicro.com/en_us/business/products/detection-response.html) TMAS AI Scanner*" >> $GITHUB_STEP_SUMMARY
