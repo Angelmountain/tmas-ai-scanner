@@ -27,7 +27,8 @@ Go to **Actions** > **AI Security Scan** > **Run workflow** and fill in:
 pip install -r requirements.txt
 
 # Download TMAS CLI
-curl -sL https://cli.artifactscan.cloudone.trendmicro.com/tmas-cli/linux/x86_64/latest/tmas -o tmas
+TMAS_VER=$(curl -sf https://ast-cli.xdr.trendmicro.com/tmas-cli/metadata.json | python3 -c "import json,sys; print(json.load(sys.stdin)['latestVersion'].lstrip('v'))")
+curl -sf "https://ast-cli.xdr.trendmicro.com/tmas-cli/${TMAS_VER}/tmas-cli_Linux_x86_64.tar.gz" | tar xz tmas
 chmod +x tmas
 
 # Generate config

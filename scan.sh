@@ -19,7 +19,10 @@ fi
 # Download TMAS if needed
 if [ ! -f "./tmas" ]; then
     echo "Downloading TMAS CLI..."
-    curl -sL https://cli.artifactscan.cloudone.trendmicro.com/tmas-cli/linux/x86_64/latest/tmas -o tmas
+    TMAS_VERSION=$(curl -sf https://ast-cli.xdr.trendmicro.com/tmas-cli/metadata.json | python3 -c "import json,sys; print(json.load(sys.stdin)['latestVersion'].lstrip('v'))")
+    curl -sf "https://ast-cli.xdr.trendmicro.com/tmas-cli/${TMAS_VERSION}/tmas-cli_Linux_x86_64.tar.gz" -o tmas.tar.gz
+    tar -xzf tmas.tar.gz tmas
+    rm tmas.tar.gz
     chmod +x tmas
 fi
 

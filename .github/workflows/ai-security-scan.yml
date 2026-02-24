@@ -82,9 +82,18 @@ jobs:
 
     - name: Install TMAS CLI
       run: |
-        echo "Downloading TMAS CLI (latest)..."
-        curl -sL https://cli.artifactscan.cloudone.trendmicro.com/tmas-cli/linux/x86_64/latest/tmas -o tmas
+        echo "Fetching latest TMAS version..."
+        METADATA=$(curl -sf https://ast-cli.xdr.trendmicro.com/tmas-cli/metadata.json)
+        TMAS_VERSION=$(echo "$METADATA" | jq -r '.latestVersion' | sed 's/^v//')
+        echo "Latest version: ${TMAS_VERSION}"
+
+        DOWNLOAD_URL="https://ast-cli.xdr.trendmicro.com/tmas-cli/${TMAS_VERSION}/tmas-cli_Linux_x86_64.tar.gz"
+        echo "Downloading from: ${DOWNLOAD_URL}"
+        curl -sf "${DOWNLOAD_URL}" -o tmas.tar.gz
+        tar -xzf tmas.tar.gz tmas
+        rm tmas.tar.gz
         chmod +x tmas
+
         echo "TMAS version:"
         ./tmas version
 
