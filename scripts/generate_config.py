@@ -63,6 +63,7 @@ def generate_config(
     config = {
         "version": "1.0",
         "target": {
+            "name": model,
             "endpoint": endpoint,
             "api_key": llm_api_key,
             "model": model,
