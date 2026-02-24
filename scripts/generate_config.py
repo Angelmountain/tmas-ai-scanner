@@ -33,15 +33,15 @@ VALID_REGIONS = [
 
 PROVIDER_DEFAULTS = {
     "openai": {
-        "endpoint": "https://api.openai.com/v1/chat/completions",
+        "endpoint": "https://api.openai.com/v1",
         "model": "gpt-4",
     },
     "azure_openai": {
-        "endpoint": "",  # user must provide full Azure endpoint
+        "endpoint": "",  # user must provide Azure base URL
         "model": "gpt-4",
     },
     "ollama": {
-        "endpoint": "http://localhost:11434/v1/chat/completions",
+        "endpoint": "http://localhost:11434/v1",
         "model": "llama3",
     },
     "custom": {

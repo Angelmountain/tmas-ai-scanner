@@ -14,7 +14,7 @@ Go to **Actions** > **AI Security Scan** > **Run workflow** and fill in:
 |-------|-------------|---------|
 | **Vision One API Key** | Your Trend Micro Vision One API key | `eyJ0eXAi...` |
 | **Vision One Region** | Region of your Vision One instance | `eu-central-1` |
-| **LLM Endpoint** | Chat completions URL of the LLM to test | `https://api.openai.com/v1/chat/completions` |
+| **LLM Endpoint** | Chat completions URL of the LLM to test | `https://api.openai.com/v1` |
 | **LLM API Key** | API key for the LLM endpoint | `sk-...` |
 | **Model** | Model name to target | `gpt-4` |
 | **Attack Preset** | `owasp` or `mitre` | `owasp` |
@@ -33,7 +33,7 @@ chmod +x tmas
 
 # Generate config
 python scripts/generate_config.py \
-  --endpoint "https://api.openai.com/v1/chat/completions" \
+  --endpoint "https://api.openai.com/v1" \
   --llm-api-key "$OPENAI_API_KEY" \
   --model "gpt-4" \
   --preset "owasp"
@@ -53,9 +53,9 @@ Any endpoint that accepts the OpenAI chat completion format works:
 
 | Provider | Endpoint URL | Notes |
 |----------|-------------|-------|
-| **OpenAI** | `https://api.openai.com/v1/chat/completions` | GPT-4, GPT-4o, GPT-3.5-turbo |
+| **OpenAI** | `https://api.openai.com/v1` | GPT-4, GPT-4o, GPT-3.5-turbo |
 | **Azure OpenAI** | `https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=2024-02-01` | Your Azure deployment |
-| **Ollama** | `http://localhost:11434/v1/chat/completions` | Local models (llama3, mistral, etc.) |
+| **Ollama** | `http://localhost:11434/v1` | Local models (llama3, mistral, etc.) |
 | **vLLM** | `http://localhost:8000/v1/chat/completions` | Self-hosted models |
 | **LiteLLM** | `http://localhost:4000/v1/chat/completions` | Proxy for any model |
 | **Custom** | Any URL | Must accept OpenAI chat format |
@@ -85,7 +85,7 @@ The `tmas aiscan llm` command requires a YAML config:
 ```yaml
 version: "1.0"
 target:
-  endpoint: "https://api.openai.com/v1/chat/completions"
+  endpoint: "https://api.openai.com/v1"
   api_key: "sk-your-openai-key"
   model: "gpt-4"
   system_prompt: "You are a helpful assistant"  # optional

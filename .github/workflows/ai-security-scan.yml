@@ -29,10 +29,10 @@ on:
 
       # === LLM Endpoint ===
       llm_endpoint:
-        description: 'LLM API endpoint URL (e.g. https://api.openai.com/v1/chat/completions)'
+        description: 'LLM API endpoint URL (e.g. https://api.openai.com/v1)'
         required: true
         type: string
-        default: 'https://api.openai.com/v1/chat/completions'
+        default: 'https://api.openai.com/v1'
 
       llm_api_key:
         description: 'API key for the LLM endpoint'
