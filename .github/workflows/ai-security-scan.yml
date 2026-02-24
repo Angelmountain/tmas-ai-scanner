@@ -1,6 +1,10 @@
 name: AI Security Scan
 
 on:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/ai-security-scan.yml'
   workflow_dispatch:
     inputs:
       # === Vision One ===
@@ -59,6 +63,7 @@ on:
 jobs:
   ai-security-scan:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
     - name: Checkout repository
