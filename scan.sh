@@ -28,15 +28,16 @@ fi
 
 echo "TMAS version: $(./tmas version 2>&1 | grep Version | head -1)"
 
-# Generate config
+# Generate config (uses env var name reference, not key directly)
 python3 scripts/generate_config.py \
     --endpoint "${LLM_ENDPOINT}" \
-    --llm-api-key "${LLM_API_KEY}" \
+    --api-key-env "${LLM_API_KEY_ENV:-LLM_API_KEY}" \
     --model "${LLM_MODEL}" \
     --preset "${ATTACK_PRESET:-owasp}" \
     --output config.yaml
 
-# Run scan
+# Run scan (LLM_API_KEY must be in env for TMAS to read via api_key_env)
+export LLM_API_KEY="${LLM_API_KEY}"
 python3 scripts/run_scan.py \
     --config config.yaml \
     --region "${TMAS_REGION:-us-east-1}" \

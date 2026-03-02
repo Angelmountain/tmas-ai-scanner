@@ -98,27 +98,22 @@ jobs:
         ./tmas version
 
     - name: Generate scan configuration
-      env:
-        LLM_ENDPOINT: ${{ inputs.llm_endpoint }}
-        LLM_API_KEY: ${{ inputs.llm_api_key }}
-        LLM_MODEL: ${{ inputs.llm_model }}
-        ATTACK_PRESET: ${{ inputs.attack_preset }}
-        SYSTEM_PROMPT: ${{ inputs.system_prompt }}
       run: |
         python scripts/generate_config.py \
-          --endpoint "$LLM_ENDPOINT" \
-          --llm-api-key "$LLM_API_KEY" \
-          --model "$LLM_MODEL" \
-          --preset "$ATTACK_PRESET" \
-          --system-prompt "$SYSTEM_PROMPT" \
+          --endpoint "${{ inputs.llm_endpoint }}" \
+          --model "${{ inputs.llm_model }}" \
+          --api-key-env "LLM_API_KEY" \
+          --preset "${{ inputs.attack_preset }}" \
+          --system-prompt "${{ inputs.system_prompt }}" \
           --output config.yaml
 
-        echo "Generated config (keys redacted):"
-        sed 's/api_key:.*/api_key: ***REDACTED***/' config.yaml
+        echo "Generated config:"
+        cat config.yaml
 
     - name: Run AI security scan
       env:
         TMAS_API_KEY: ${{ inputs.vision_one_api_key }}
+        LLM_API_KEY: ${{ inputs.llm_api_key }}
       run: |
         python scripts/run_scan.py \
           --config config.yaml \

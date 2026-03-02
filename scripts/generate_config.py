@@ -53,19 +53,24 @@ PROVIDER_DEFAULTS = {
 
 def generate_config(
     endpoint: str,
-    llm_api_key: str,
     model: str,
+    api_key_env: str = "LLM_API_KEY",
     attack_preset: str = "owasp",
     system_prompt: str = "",
 ) -> dict:
-    """Generate TMAS aiscan config dictionary."""
+    """Generate TMAS aiscan config dictionary.
+
+    TMAS uses `api_key_env` to reference an environment variable name
+    containing the LLM API key (not the key itself). This keeps secrets
+    out of the config file.
+    """
 
     config = {
         "version": "1.0",
         "target": {
             "name": model,
             "endpoint": endpoint,
-            "api_key": llm_api_key,
+            "api_key_env": api_key_env,
             "model": model,
         },
         "attack_preset": attack_preset,
@@ -87,9 +92,9 @@ def main():
         help="LLM API endpoint URL",
     )
     parser.add_argument(
-        "--llm-api-key",
-        default=os.getenv("LLM_API_KEY", ""),
-        help="API key for the LLM endpoint",
+        "--api-key-env",
+        default=os.getenv("LLM_API_KEY_ENV", "LLM_API_KEY"),
+        help="Name of the environment variable containing the LLM API key (default: LLM_API_KEY)",
     )
     parser.add_argument(
         "--model",
@@ -133,16 +138,11 @@ def main():
     if not args.endpoint:
         print("ERROR: --endpoint or LLM_ENDPOINT env var is required", file=sys.stderr)
         sys.exit(1)
-    if not args.llm_api_key:
-        print(
-            "ERROR: --llm-api-key or LLM_API_KEY env var is required", file=sys.stderr
-        )
-        sys.exit(1)
 
     config = generate_config(
         endpoint=args.endpoint,
-        llm_api_key=args.llm_api_key,
         model=args.model,
+        api_key_env=args.api_key_env,
         attack_preset=args.preset,
         system_prompt=args.system_prompt,
     )
