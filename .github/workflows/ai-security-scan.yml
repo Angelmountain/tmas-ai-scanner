@@ -92,6 +92,36 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Install and start LiteLLM proxy (Anthropic)
+      if: inputs.llm_provider == 'anthropic'
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.llm_api_key }}
+      run: |
+        pip install 'litellm[proxy]'
+
+        MODEL_NAME="${{ inputs.llm_model }}"
+        MODEL_NAME="${MODEL_NAME:-claude-sonnet-4-6}"
+
+        echo "Starting LiteLLM proxy for anthropic/${MODEL_NAME}..."
+        nohup litellm --model "anthropic/${MODEL_NAME}" --port 4000 --host 0.0.0.0 > litellm.log 2>&1 &
+        echo $! > litellm.pid
+
+        # Wait for proxy to be ready
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+            echo "LiteLLM proxy is ready on port 4000"
+            break
+          fi
+          echo "Waiting for LiteLLM proxy... ($i/30)"
+          sleep 2
+        done
+
+        if ! curl -sf http://localhost:4000/health > /dev/null 2>&1; then
+          echo "ERROR: LiteLLM proxy failed to start"
+          cat litellm.log
+          exit 1
+        fi
+
     - name: Install TMAS CLI
       run: |
         echo "Fetching latest TMAS version..."
@@ -114,7 +144,10 @@ jobs:
         ARGS="--api-key-env LLM_API_KEY --preset ${{ inputs.attack_preset }} --output config.yaml"
         ARGS="$ARGS --provider ${{ inputs.llm_provider }}"
 
-        if [ -n "${{ inputs.llm_endpoint }}" ]; then
+        # When using Anthropic, route through LiteLLM proxy on localhost
+        if [ "${{ inputs.llm_provider }}" = "anthropic" ]; then
+          ARGS="$ARGS --endpoint http://localhost:4000/v1"
+        elif [ -n "${{ inputs.llm_endpoint }}" ]; then
           ARGS="$ARGS --endpoint ${{ inputs.llm_endpoint }}"
         fi
 
@@ -135,6 +168,7 @@ jobs:
       env:
         TMAS_API_KEY: ${{ inputs.vision_one_api_key }}
         LLM_API_KEY: ${{ inputs.llm_api_key }}
+        ANTHROPIC_API_KEY: ${{ inputs.llm_provider == 'anthropic' && inputs.llm_api_key || '' }}
       run: |
         python scripts/run_scan.py \
           --config config.yaml \
@@ -149,7 +183,7 @@ jobs:
       id: upload-results
       uses: actions/upload-artifact@v4
       with:
-        name: ai-security-scan-results
+        name: scan-${{ inputs.llm_provider }}-${{ inputs.llm_model || 'default' }}-${{ inputs.attack_preset }}
         path: results/
         retention-days: 30
 
