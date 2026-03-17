@@ -27,12 +27,24 @@ on:
           - 'ap-southeast-1'
           - 'me-central-1'
 
-      # === LLM Endpoint ===
-      llm_endpoint:
-        description: 'LLM API endpoint URL (e.g. https://api.openai.com/v1)'
+      # === LLM Provider & Endpoint ===
+      llm_provider:
+        description: 'LLM Provider (sets default endpoint & model)'
         required: true
+        type: choice
+        default: 'openai'
+        options:
+          - 'openai'
+          - 'anthropic'
+          - 'azure_openai'
+          - 'ollama'
+          - 'custom'
+
+      llm_endpoint:
+        description: 'LLM API endpoint URL (leave default to use provider preset)'
+        required: false
         type: string
-        default: 'https://api.openai.com/v1'
+        default: ''
 
       llm_api_key:
         description: 'API key for the LLM endpoint'
@@ -40,10 +52,10 @@ on:
         type: string
 
       llm_model:
-        description: 'Model name (e.g. gpt-4, gpt-4o, claude-3-opus, llama3)'
-        required: true
+        description: 'Model name (e.g. gpt-4, gpt-4o, claude-sonnet-4-6, llama3). Leave empty to use provider default.'
+        required: false
         type: string
-        default: 'gpt-4'
+        default: ''
 
       # === Scan Settings ===
       attack_preset:
@@ -99,13 +111,22 @@ jobs:
 
     - name: Generate scan configuration
       run: |
-        python scripts/generate_config.py \
-          --endpoint "${{ inputs.llm_endpoint }}" \
-          --model "${{ inputs.llm_model }}" \
-          --api-key-env "LLM_API_KEY" \
-          --preset "${{ inputs.attack_preset }}" \
-          --system-prompt "${{ inputs.system_prompt }}" \
-          --output config.yaml
+        ARGS="--api-key-env LLM_API_KEY --preset ${{ inputs.attack_preset }} --output config.yaml"
+        ARGS="$ARGS --provider ${{ inputs.llm_provider }}"
+
+        if [ -n "${{ inputs.llm_endpoint }}" ]; then
+          ARGS="$ARGS --endpoint ${{ inputs.llm_endpoint }}"
+        fi
+
+        if [ -n "${{ inputs.llm_model }}" ]; then
+          ARGS="$ARGS --model ${{ inputs.llm_model }}"
+        fi
+
+        if [ -n "${{ inputs.system_prompt }}" ]; then
+          ARGS="$ARGS --system-prompt \"${{ inputs.system_prompt }}\""
+        fi
+
+        eval python scripts/generate_config.py $ARGS
 
         echo "Generated config:"
         cat config.yaml
@@ -140,8 +161,9 @@ jobs:
         echo "### Scan Configuration" >> $GITHUB_STEP_SUMMARY
         echo "| Setting | Value |" >> $GITHUB_STEP_SUMMARY
         echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
-        echo "| **Endpoint** | \`${{ inputs.llm_endpoint }}\` |" >> $GITHUB_STEP_SUMMARY
-        echo "| **Model** | \`${{ inputs.llm_model }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Provider** | \`${{ inputs.llm_provider }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Endpoint** | \`${{ inputs.llm_endpoint || 'provider default' }}\` |" >> $GITHUB_STEP_SUMMARY
+        echo "| **Model** | \`${{ inputs.llm_model || 'provider default' }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Attack Preset** | \`${{ inputs.attack_preset }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Region** | \`${{ inputs.vision_one_region }}\` |" >> $GITHUB_STEP_SUMMARY
         echo "| **Timestamp** | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY

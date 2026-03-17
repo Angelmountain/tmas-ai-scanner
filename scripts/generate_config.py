@@ -8,7 +8,7 @@ Supports dynamic endpoint selection for any OpenAI-compatible LLM API.
 Supported providers (any OpenAI-compatible endpoint works):
   - OpenAI:    https://api.openai.com/v1/chat/completions
   - Azure:     https://<resource>.openai.azure.com/openai/deployments/<deployment>/chat/completions?api-version=2024-02-01
-  - Anthropic: (via proxy/adapter)
+  - Anthropic: https://api.anthropic.com/v1 (requires OpenAI-compatible proxy like LiteLLM)
   - Ollama:    http://localhost:11434/v1/chat/completions
   - Custom:    Any endpoint that accepts OpenAI chat completion format
 """
@@ -43,6 +43,10 @@ PROVIDER_DEFAULTS = {
     "ollama": {
         "endpoint": "http://localhost:11434/v1",
         "model": "llama3",
+    },
+    "anthropic": {
+        "endpoint": "https://api.anthropic.com/v1",
+        "model": "claude-sonnet-4-6",
     },
     "custom": {
         "endpoint": "",
@@ -98,8 +102,8 @@ def main():
     )
     parser.add_argument(
         "--model",
-        default=os.getenv("LLM_MODEL", "gpt-4"),
-        help="Model name (default: gpt-4)",
+        default=os.getenv("LLM_MODEL", ""),
+        help="Model name (default: from provider or gpt-4)",
     )
     parser.add_argument(
         "--preset",
@@ -110,7 +114,7 @@ def main():
     parser.add_argument(
         "--provider",
         default=os.getenv("LLM_PROVIDER", ""),
-        choices=list(PROVIDER_DEFAULTS.keys()),
+        choices=[""] + list(PROVIDER_DEFAULTS.keys()),
         help="LLM provider for default endpoint/model",
     )
     parser.add_argument(
@@ -131,8 +135,12 @@ def main():
         defaults = PROVIDER_DEFAULTS[args.provider]
         if not args.endpoint and defaults["endpoint"]:
             args.endpoint = defaults["endpoint"]
-        if args.model == "gpt-4" and defaults["model"]:
+        if (not args.model or args.model == "gpt-4") and defaults["model"]:
             args.model = defaults["model"]
+
+    # Fallback model if still empty
+    if not args.model:
+        args.model = "gpt-4"
 
     # Validate required fields
     if not args.endpoint:
