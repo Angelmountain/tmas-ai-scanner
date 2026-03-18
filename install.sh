@@ -23,11 +23,11 @@ echo ""
 install_prereqs() {
   echo "[1/4] Checking prerequisites..."
 
-  # Python 3
+  # Python 3 + venv
   if ! command -v python3 &>/dev/null; then
     echo "  Installing Python 3..."
     if command -v apt-get &>/dev/null; then
-      sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv
+      sudo apt-get update -qq && sudo apt-get install -y -qq python3 python3-pip python3-venv python3-full
     elif command -v yum &>/dev/null; then
       sudo yum install -y python3 python3-pip
     elif command -v dnf &>/dev/null; then
@@ -37,13 +37,14 @@ install_prereqs() {
       exit 1
     fi
   fi
-  echo "  Python3: $(python3 --version)"
 
-  # pip
-  if ! python3 -m pip --version &>/dev/null; then
-    echo "  Installing pip..."
-    python3 -m ensurepip --upgrade 2>/dev/null || curl -sf https://bootstrap.pypa.io/get-pip.py | python3
+  # Ensure python3-venv is available on Debian/Ubuntu
+  if command -v apt-get &>/dev/null && ! python3 -m venv --help &>/dev/null 2>&1; then
+    echo "  Installing python3-venv..."
+    sudo apt-get install -y -qq python3-venv python3-full
   fi
+
+  echo "  Python3: $(python3 --version)"
 
   # jq
   if ! command -v jq &>/dev/null; then
@@ -79,6 +80,16 @@ setup_repo() {
   fi
 
   cd "$SCAN_DIR"
+
+  # Create virtual environment to avoid PEP 668 / externally-managed-environment errors
+  if [ ! -d ".venv" ]; then
+    echo "  Creating virtual environment..."
+    python3 -m venv .venv
+  fi
+  source .venv/bin/activate
+  echo "  Using venv: $(which python3)"
+
+  python3 -m pip install -q --upgrade pip
   python3 -m pip install -q -r requirements.txt
   echo "  Dependencies installed"
   echo ""
@@ -222,7 +233,7 @@ run_scan() {
   # Handle Anthropic via LiteLLM proxy
   if [ "$PROVIDER" = "anthropic" ]; then
     echo "Starting LiteLLM proxy for Anthropic..."
-    pip install -q 'litellm[proxy]'
+    python3 -m pip install -q 'litellm[proxy]'
     export ANTHROPIC_API_KEY="$LLM_API_KEY"
     nohup litellm --model "anthropic/${MODEL}" --port 4000 --host 0.0.0.0 > litellm.log 2>&1 &
     LITELLM_PID=$!
