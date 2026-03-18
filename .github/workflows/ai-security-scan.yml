@@ -47,9 +47,10 @@ on:
         default: ''
 
       llm_api_key:
-        description: 'API key for the LLM endpoint'
-        required: true
+        description: 'API key for the LLM endpoint (not required for Ollama)'
+        required: false
         type: string
+        default: 'not-needed'
 
       llm_model:
         description: 'Model name (e.g. gpt-4, gpt-4o, claude-sonnet-4-6, llama3). Leave empty to use provider default.'
@@ -122,6 +123,33 @@ jobs:
           exit 1
         fi
 
+    - name: Install and start Ollama
+      if: inputs.llm_provider == 'ollama'
+      run: |
+        curl -fsSL https://ollama.com/install.sh | sh
+
+        # Start Ollama server in background
+        nohup ollama serve > ollama.log 2>&1 &
+        echo $! > ollama.pid
+
+        # Wait for Ollama to be ready
+        for i in $(seq 1 30); do
+          if curl -sf http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo "Ollama server is ready"
+            break
+          fi
+          echo "Waiting for Ollama... ($i/30)"
+          sleep 2
+        done
+
+        MODEL_NAME="${{ inputs.llm_model }}"
+        MODEL_NAME="${MODEL_NAME:-llama3}"
+
+        echo "Pulling model: ${MODEL_NAME}..."
+        ollama pull "${MODEL_NAME}"
+        echo "Model ${MODEL_NAME} ready"
+        ollama list
+
     - name: Install TMAS CLI
       run: |
         echo "Fetching latest TMAS version..."
@@ -145,8 +173,11 @@ jobs:
         ARGS="$ARGS --provider ${{ inputs.llm_provider }}"
 
         # When using Anthropic, route through LiteLLM proxy on localhost
+        # When using Ollama, point to local Ollama server
         if [ "${{ inputs.llm_provider }}" = "anthropic" ]; then
           ARGS="$ARGS --endpoint http://localhost:4000/v1"
+        elif [ "${{ inputs.llm_provider }}" = "ollama" ]; then
+          ARGS="$ARGS --endpoint http://localhost:11434/v1"
         elif [ -n "${{ inputs.llm_endpoint }}" ]; then
           ARGS="$ARGS --endpoint ${{ inputs.llm_endpoint }}"
         fi
