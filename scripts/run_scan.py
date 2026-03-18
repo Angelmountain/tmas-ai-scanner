@@ -21,6 +21,7 @@ def run_tmas_scan(
     region: str,
     tmas_api_key: str,
     verbose: bool = False,
+    timeout: int = 1800,
 ) -> dict:
     """Execute tmas aiscan llm and capture results."""
 
@@ -48,7 +49,7 @@ def run_tmas_scan(
         capture_output=True,
         text=True,
         env=env,
-        timeout=600,
+        timeout=timeout,
     )
 
     stdout = result.stdout
@@ -444,6 +445,12 @@ def main():
         action="store_true",
         help="Enable verbose TMAS output",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=1800,
+        help="Scan timeout in seconds (default: 1800 = 30 min)",
+    )
 
     args = parser.parse_args()
 
@@ -471,6 +478,7 @@ def main():
         region=args.region,
         tmas_api_key=args.tmas_api_key,
         verbose=args.verbose,
+        timeout=args.timeout,
     )
 
     # Save JSON results
