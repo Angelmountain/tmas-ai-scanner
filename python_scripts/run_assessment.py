@@ -147,6 +147,7 @@ class VisionOneClient:
         start_time: str,
         end_time: str,
         query: Optional[str] = None,
+        select_fields: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a paginated search and return all items."""
         if log_type not in ("network", "detections", "everything"):
@@ -177,8 +178,9 @@ class VisionOneClient:
                         "endDateTime": end_time,
                         "top": PAGE_SIZE,
                     }
-                    if lt == "network":
-                        params["select"] = "suid,serverPort,productCode"
+                    # Only fetch the fields we need for aggregation
+                    if select_fields:
+                        params["select"] = select_fields
                     if next_link:
                         params["nextPageToken"] = next_link
                     request_url = url
@@ -489,7 +491,19 @@ def process_single_search(
     )
 
     try:
-        results = client.search_logs(log_type, start_time, end_time, query=query)
+        # Build select fields - only fetch the field we need for aggregation
+        sf_lower = sorting_field.strip().lower()
+        api_field = _FIELD_NAME_MAP.get(sf_lower, sorting_field.strip())
+        # Always include the aggregation field; for network also include productCode
+        if log_type == "network" and api_field:
+            select_fields = f"{api_field},productCode"
+        else:
+            select_fields = None  # detections API doesn't support select
+
+        results = client.search_logs(
+            log_type, start_time, end_time, query=query,
+            select_fields=select_fields,
+        )
 
         if results:
             rows_to_export = aggregate_results(search_name, sorting_field, results)
