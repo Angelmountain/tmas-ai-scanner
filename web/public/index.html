@@ -224,6 +224,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="sb-item" onclick="showView('github')" data-view="github"><span class="sb-icon cy">&#9881;</span>Workflow Runs</div>
   <div class="sb-item" onclick="showView('dispatch')" data-view="dispatch"><span class="sb-icon am">&#9654;</span>Trigger Workflow</div>
   <div class="sb-section">Reports</div>
+  <div class="sb-item" onclick="showView('sessions')" data-view="sessions"><span class="sb-icon cy">&#9776;</span>Sessions</div>
   <div class="sb-item" onclick="showView('history')" data-view="history"><span class="sb-icon rd">&#128196;</span>History</div>
 </nav>
 
@@ -407,6 +408,16 @@ textarea{resize:vertical;min-height:60px}
   </div></div></div>
 </div>
 
+<!-- ═══ SESSIONS ═══ -->
+<div class="view" id="view-sessions">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2>Assessment Sessions</h2>
+    <button class="btn btn-sm btn-s" onclick="loadSessions()">Refresh</button>
+  </div>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:14px">All assessment and scan sessions are saved on the server. You can close the browser and come back - running jobs continue in the background.</p>
+  <div id="sessionsList"><div class="empty"><div class="empty-icon">&#9776;</div>Loading sessions...</div></div>
+</div>
+
 <!-- ═══ HISTORY ═══ -->
 <div class="view" id="view-history">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><h2>History</h2><button class="btn btn-sm btn-d" onclick="clearHist()">Clear</button></div>
@@ -421,7 +432,7 @@ textarea{resize:vertical;min-height:60px}
 let searches=[],csvSearches=[],activeJob=null,pollTimer=null,ghTimer=null,charts={};
 
 // ═══ NAV ═══
-function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();}
+function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();if(n==='sessions')loadSessions();}
 function toggleCard(h){const b=h.nextElementSibling,c=h.querySelector('.chevron');b.classList.toggle('open');if(c)c.classList.toggle('open');}
 function showTab(e,id){const p=e.target.closest('.view')||e.target.parentElement.parentElement;p.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));p.querySelectorAll('.tab-pane').forEach(t=>t.classList.remove('active'));e.target.classList.add('active');document.getElementById(id).classList.add('active');}
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),4000);}
@@ -741,6 +752,93 @@ async function dispatchAi(){
 }
 async function dispatchAss(){
   try{const r=await fetch('/api/github/dispatch/security-assessment.yml?repo=Angelmountain/security-assesment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inputs:{api_key:document.getElementById('dAssKey').value,base_url:document.getElementById('dAssUrl').value,time_interval:document.getElementById('dAssTime').value}})});const d=await r.json();if(d.success){toast('Workflow triggered!','ok');showView('github');}else toast(d.error||'Failed','err');}catch(e){toast(e.message,'err');}
+}
+
+// ═══ SESSIONS ═══
+async function loadSessions(){
+  try{
+    const r=await fetch('/api/jobs');const jobs=await r.json();
+    const el=document.getElementById('sessionsList');
+    if(!jobs.length){el.innerHTML='<div class="empty"><div class="empty-icon">&#9776;</div>No sessions yet. Run an assessment to create one.</div>';return;}
+
+    el.innerHTML=jobs.map(j=>{
+      const isRunning=j.status==='running';
+      const isComplete=j.status==='completed'||j.status==='partial';
+      const isFailed=j.status==='failed'||j.status==='interrupted';
+      const statusCls=isRunning?'warn':isComplete?'ok':'err';
+      const statusIcon=isRunning?'&#9679;':isComplete?'&#10003;':'&#10007;';
+      const started=j.startedAt?new Date(j.startedAt).toLocaleString():'—';
+      const duration=j.finishedAt&&j.startedAt?Math.round((j.finishedAt-j.startedAt)/1000)+'s':isRunning?'running...':'—';
+      const pct=j.total>0?Math.round(j.progress/j.total*100):0;
+      const summary=j.results?.summary||{};
+
+      return`<div class="card" style="margin-bottom:8px">
+        <div class="card-hd" onclick="toggleCard(this)">
+          <span class="badge ${j.type==='assessment'?'info':'pu'}">${j.type||'assessment'}</span>
+          <span class="badge ${statusCls}">${statusIcon} ${j.status}</span>
+          <span class="card-title" style="font-size:13px">${j.id}</span>
+          ${isRunning?`<span style="font-size:11px;color:var(--warning)">${j.current||''} (${pct}%)</span>`:''}
+          ${isComplete?`<span style="font-size:11px;color:var(--text3)">${j.excelCount||summary.with_data||'?'} files</span>`:''}
+          <span style="font-size:11px;color:var(--text3)">${started}</span>
+          <span class="chevron">&#9656;</span>
+        </div>
+        <div class="card-bd">
+          <div class="stats" style="margin-bottom:10px">
+            <div class="stat"><div class="stat-v">${j.total||summary.total||'—'}</div><div class="stat-l">Searches</div></div>
+            <div class="stat ${isComplete?'g':''}"><div class="stat-v">${summary.with_data||j.excelCount||'—'}</div><div class="stat-l">With Data</div></div>
+            <div class="stat"><div class="stat-v">${summary.total_records?fmtNum(summary.total_records):'—'}</div><div class="stat-l">Records</div></div>
+            <div class="stat"><div class="stat-v">${duration}</div><div class="stat-l">Duration</div></div>
+            <div class="stat"><div class="stat-v">${j.hasPpt?'Yes':'No'}</div><div class="stat-l">PowerPoint</div></div>
+          </div>
+          ${isRunning?`<div class="progress-wrap"><div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div><div class="progress-info"><span>${j.current||'Running...'}</span><span>${pct}%</span></div></div>`:''}
+          ${isRunning?`<div class="commentary">This assessment is still running. Progress updates automatically.</div>`:''}
+          <div class="btn-group">
+            ${isComplete?`<button class="btn btn-p btn-sm" onclick="reconnectJob('${j.id}')">View Results</button>`:''}
+            ${isComplete?`<button class="btn btn-s btn-sm" onclick="window.location='/api/assessment/download/${j.id}'">Download ZIP</button>`:''}
+            ${isComplete&&j.hasPpt?`<button class="btn btn-s btn-sm" onclick="window.location='/api/assessment/ppt/${j.id}'">Download PPT</button>`:''}
+            ${isRunning?`<button class="btn btn-p btn-sm" onclick="reconnectRunning('${j.id}')">Monitor</button>`:''}
+            ${!isRunning?`<button class="btn btn-d btn-sm" onclick="deleteSession('${j.id}')">Delete</button>`:''}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Auto-refresh if any running
+    if(jobs.some(j=>j.status==='running')){
+      setTimeout(loadSessions,5000);
+    }
+  }catch(e){document.getElementById('sessionsList').innerHTML=`<div class="error-box"><h4>Failed to load sessions</h4><p>${esc(e.message)}</p></div>`;}
+}
+
+async function reconnectJob(id){
+  activeJob=id;
+  showView('assessment');
+  document.getElementById('pipelineSection').style.display='none';
+  document.getElementById('errorSection').style.display='none';
+  loadResults(id);
+}
+
+function reconnectRunning(id){
+  activeJob=id;
+  showView('assessment');
+  document.getElementById('pipelineSection').style.display='block';
+  document.getElementById('resultsSection').style.display='none';
+  document.getElementById('errorSection').style.display='none';
+  document.getElementById('btnRun').disabled=true;
+  document.getElementById('consoleOut').textContent='Reconnecting to running job...';
+  renderPipeline(document.getElementById('pipeline'),[
+    {label:'Config',status:'done'},{label:'Query API',status:'active'},
+    {label:'Aggregate',status:'pending'},{label:'Excel',status:'pending'},{label:'PowerPoint',status:'pending'}
+  ]);
+  document.getElementById('pipelineComment').textContent='Reconnected to running assessment...';
+  pollTimer=setInterval(()=>pollAssessment(id),2000);
+}
+
+async function deleteSession(id){
+  if(!confirm('Delete this session and all its data?'))return;
+  await fetch('/api/jobs/'+id,{method:'DELETE'});
+  loadSessions();
+  toast('Session deleted','info');
 }
 
 // ═══ HISTORY ═══

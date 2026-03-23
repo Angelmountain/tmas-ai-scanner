@@ -86,6 +86,54 @@ function saveJobState(id) {
   try { fs.writeFileSync(statePath, JSON.stringify(state, null, 2)); } catch (e) { /* ignore */ }
 }
 
+// Restore jobs from disk on startup (survives restarts)
+function restoreJobsFromDisk() {
+  try {
+    const dirs = fs.readdirSync(JOBS_DIR).filter(d => {
+      const p = path.join(JOBS_DIR, d, 'state.json');
+      return fs.existsSync(p);
+    });
+    for (const d of dirs) {
+      if (jobs.has(d)) continue;
+      try {
+        const state = JSON.parse(fs.readFileSync(path.join(JOBS_DIR, d, 'state.json'), 'utf-8'));
+        // Mark orphaned running jobs as failed (server restarted mid-run)
+        if (state.status === 'running') state.status = 'interrupted';
+        jobs.set(d, { ...state, console: [] });
+      } catch (e) { /* skip corrupt */ }
+    }
+    if (dirs.length) console.log(`Restored ${dirs.length} jobs from disk`);
+  } catch (e) { /* ignore */ }
+}
+restoreJobsFromDisk();
+
+// List all jobs (from memory + disk)
+function listAllJobs() {
+  const all = new Map();
+  // Disk jobs first
+  try {
+    const dirs = fs.readdirSync(JOBS_DIR).filter(d =>
+      fs.existsSync(path.join(JOBS_DIR, d, 'state.json'))
+    );
+    for (const d of dirs) {
+      try {
+        const state = JSON.parse(fs.readFileSync(path.join(JOBS_DIR, d, 'state.json'), 'utf-8'));
+        const hasExcel = fs.existsSync(path.join(JOBS_DIR, d, 'excel'));
+        const excelCount = hasExcel ? fs.readdirSync(path.join(JOBS_DIR, d, 'excel')).filter(f => f.endsWith('.xlsx')).length : 0;
+        const hasPpt = fs.existsSync(path.join(JOBS_DIR, d, 'report.pptx'));
+        const hasSummary = fs.existsSync(path.join(JOBS_DIR, d, 'summary.json'));
+        all.set(d, { ...state, excelCount, hasPpt, hasSummary });
+      } catch (e) { /* skip */ }
+    }
+  } catch (e) { /* ignore */ }
+  // Override with in-memory (more current for running jobs)
+  for (const [id, job] of jobs) {
+    const { _proc, console: _, ...safe } = job;
+    all.set(id, { ...all.get(id), ...safe });
+  }
+  return Array.from(all.values()).sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0));
+}
+
 // ─── History persistence ────────────────────────────────────────────────────
 function loadHistory() {
   try {
@@ -581,6 +629,19 @@ app.post('/api/github/dispatch/:workflow', (req, res) => {
 // ─── History ────────────────────────────────────────────────────────────────
 app.get('/api/history', (req, res) => res.json(loadHistory()));
 app.delete('/api/history', (req, res) => { saveHistory([]); res.json({ success: true }); });
+
+// ─── Jobs (persistent sessions) ────────────────────────────────────────────
+app.get('/api/jobs', (req, res) => {
+  res.json(listAllJobs());
+});
+
+app.delete('/api/jobs/:jobId', (req, res) => {
+  const jobDir = path.join(JOBS_DIR, req.params.jobId);
+  if (!fs.existsSync(jobDir)) return res.status(404).json({ error: 'Job not found' });
+  jobs.delete(req.params.jobId);
+  fs.rmSync(jobDir, { recursive: true, force: true });
+  res.json({ success: true });
+});
 
 // ─── SPA Fallback ───────────────────────────────────────────────────────────
 app.get('*', (req, res) => {
