@@ -396,7 +396,8 @@ app.get('/api/assessment/results/:jobId', (req, res) => {
   const pptPath = path.join(jobDir, 'report.pptx');
   const hasPpt = fs.existsSync(pptPath);
 
-  res.json({ status: job.status, summary, excelFiles, hasPpt });
+  const status = job ? job.status : (summary ? 'completed' : 'unknown');
+  res.json({ status, summary, excelFiles, hasPpt });
 });
 
 app.get('/api/assessment/download/:jobId', (req, res) => {
