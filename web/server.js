@@ -105,7 +105,7 @@ function addHistoryEntry(entry) {
 }
 
 // ─── Helper: spawn Python with JSON marker parsing ──────────────────────────
-function spawnPython(scriptPath, args, env, jobId, onProgress) {
+function spawnPython(scriptPath, args, env, jobId, onProgress, timeoutMs = 7200000) {
   return new Promise((resolve, reject) => {
     const job = jobs.get(jobId);
     const proc = spawn('python3', [scriptPath, ...args], {
@@ -116,12 +116,17 @@ function spawnPython(scriptPath, args, env, jobId, onProgress) {
     let stdout = '';
     let jsonResult = null;
 
+    // Kill process after timeout (default 2h)
+    const timer = setTimeout(() => {
+      proc.kill('SIGTERM');
+      if (job) job.console.push({ type: 'stderr', text: `Process killed after ${timeoutMs/1000}s timeout\n`, ts: Date.now() });
+    }, timeoutMs);
+
     proc.stdout.on('data', (data) => {
       const text = data.toString();
       stdout += text;
       if (job) job.console.push({ type: 'stdout', text, ts: Date.now() });
 
-      // Parse progress lines
       for (const line of text.split('\n')) {
         const trimmed = line.trim();
         if (!trimmed) continue;
@@ -129,7 +134,7 @@ function spawnPython(scriptPath, args, env, jobId, onProgress) {
           const obj = JSON.parse(trimmed);
           if (obj.type === 'progress' && onProgress) onProgress(obj);
           if (obj.type === 'complete') jsonResult = obj;
-        } catch (e) { /* not JSON, ignore */ }
+        } catch (e) { /* not JSON */ }
       }
     });
 
@@ -139,7 +144,7 @@ function spawnPython(scriptPath, args, env, jobId, onProgress) {
     });
 
     proc.on('close', (code) => {
-      // Try JSON markers if no progress-line result
+      clearTimeout(timer);
       if (!jsonResult) {
         const startMarker = '---JSON_START---';
         const endMarker = '---JSON_END---';
@@ -152,9 +157,8 @@ function spawnPython(scriptPath, args, env, jobId, onProgress) {
       resolve({ code, result: jsonResult, stdout });
     });
 
-    proc.on('error', (err) => reject(err));
+    proc.on('error', (err) => { clearTimeout(timer); reject(err); });
 
-    // Store process ref for potential cancellation
     if (job) job._proc = proc;
   });
 }
@@ -283,6 +287,12 @@ Sanctioned_States,Connections to sanctioned countries,hostName,network,horizonta
 app.post('/api/assessment/run', async (req, res) => {
   const { apiKey, baseUrl, timeInterval, searches, csvContent } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'API key required' });
+
+  // Validate inputs
+  const ti = parseInt(timeInterval) || 720;
+  if (ti < 1 || ti > 8760) return res.status(400).json({ error: 'Time interval must be 1-8760 hours' });
+  if (searches && searches.length > 100) return res.status(400).json({ error: 'Max 100 searches per assessment' });
+  if (csvContent && csvContent.length > 500000) return res.status(400).json({ error: 'CSV too large (max 500KB)' });
 
   const job = createJob('assessment', { total: (searches || []).length });
 
@@ -479,7 +489,7 @@ app.get('/api/aiscan/report/:jobId', (req, res) => {
 // ─── GitHub Actions ─────────────────────────────────────────────────────────
 const GH_REPOS = [
   'Angelmountain/tmas-ai-scanner',
-  'Angelmountain/security-assesment',
+  'Angelmountain/security-assesment',  // note: repo name has single 's'
 ];
 
 app.get('/api/github/runs', (req, res) => {
