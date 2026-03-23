@@ -233,10 +233,61 @@ class VisionOneClient:
 
 # Map of (search_name_lower, sorting_field_lower) -> (label_col, count_col, item_key)
 _AGGREGATION_RULES: Dict[Tuple[str, str], Tuple[str, str, str]] = {
+    # Core network
     ("network detections", "rulename"): ("Rule Name", "Occurrences", "ruleName"),
     ("top accounts used", "suid"): ("Account Name", "Usage Count", "suid"),
     ("server ports used", "serverport"): ("Server Port", "Connection Count", "serverPort"),
     ("unsuccessful logon", "rulename"): ("Rule Name", "Failed Logon Attempts", "ruleName"),
+    ("top file used", "filename"): ("File Name", "Access Count", "fileName"),
+    ("top file types used", "filetype"): ("File Type", "Access Count", "fileType"),
+    ("protocols used", "app"): ("Protocol", "Usage Count", "app"),
+    ("request methods", "requestmethod"): ("Request Method", "Usage Count", "requestMethod"),
+    ("response codes", "respcode"): ("Response Code", "Occurrences", "respCode"),
+    ("ssl cert common name", "sslcertcommonname"): ("SSL Certificate", "Occurrences", "sslCertCommonName"),
+    # SSH
+    ("ssh detections", "rulename"): ("SSH Rule Name", "Detection Count", "ruleName"),
+    ("ssh versions", "respappversion"): ("SSH Version", "Connection Count", "respAppVersion"),
+    # PUA - all hostname based
+    ("pua ai services", "hostname"): ("AI Service", "Access Count", "hostName"),
+    ("pua remote access", "hostname"): ("Remote Access Tool", "Access Count", "hostName"),
+    ("pua cloud storage", "hostname"): ("Cloud Storage Service", "Access Count", "hostName"),
+    ("pua vpn services", "hostname"): ("VPN Service", "Access Count", "hostName"),
+    ("pua pastebin", "hostname"): ("Pastebin Service", "Access Count", "hostName"),
+    ("pua darknet links", "hostname"): ("Darknet Service", "Access Count", "hostName"),
+    ("pua administrator usage", "app"): ("Application", "Administrator Usage Count", "app"),
+    ("root detections", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+    # RDP
+    ("rdp user usage", "suid"): ("User Account", "RDP Connection Count", "suid"),
+    ("rdp source ip", "clientip"): ("Source IP Address", "RDP Connection Count", "clientIp"),
+    ("rdp destination ip", "serverip"): ("Destination IP Address", "RDP Connection Count", "serverIp"),
+    # Geographic / Vendor
+    ("bad states", "hostname"): ("Hostname", "Access Count", "hostName"),
+    ("suspicious tlds", "hostname"): ("Hostname", "Access Count", "hostName"),
+    ("russian it-companies", "hostname"): ("Russian Company", "Access Count", "hostName"),
+    ("chinese it-companies", "hostname"): ("Chinese Company", "Access Count", "hostName"),
+    ("epp/edr/xdr vendors", "hostname"): ("Security Vendor", "Access Count", "hostName"),
+    ("firewall vendors", "hostname"): ("Firewall Vendor", "Access Count", "hostName"),
+    ("us vendors", "hostname"): ("US Tech Company", "Access Count", "hostName"),
+    # External threats
+    ("external attacks", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+}
+
+# Map sorting field names from CSV to actual API response field names
+_FIELD_NAME_MAP: Dict[str, str] = {
+    "hostname": "hostName",
+    "hostnamedns": "hostName",
+    "rulename": "ruleName",
+    "serverport": "serverPort",
+    "clientip": "clientIp",
+    "serverip": "serverIp",
+    "suid": "suid",
+    "app": "app",
+    "requestmethod": "requestMethod",
+    "respcode": "respCode",
+    "sslcertcommonname": "sslCertCommonName",
+    "filename": "fileName",
+    "filetype": "fileType",
+    "respappversion": "respAppVersion",
 }
 
 
@@ -279,17 +330,36 @@ def aggregate_results(
         )
         return agg
 
-    # Generic aggregation: if the sorting field exists in the data, count it
-    sf = sorting_field.strip()
-    if sf and results and sf in results[0]:
-        agg = _aggregate_by_field(results, sf, sf, "Count")
+    # Generic aggregation: map the sorting field name to actual API field
+    sf_raw = sorting_field.strip()
+    sf_lower = sf_raw.lower()
+    api_field = _FIELD_NAME_MAP.get(sf_lower, sf_raw)
+
+    if api_field and results and api_field in results[0]:
+        label = sf_raw.replace("_", " ").title()
+        agg = _aggregate_by_field(results, api_field, label, "Count")
         logger.info(
             "Generic aggregation: %d items -> %d unique '%s' values",
-            len(results), len(agg), sf,
+            len(results), len(agg), api_field,
+        )
+        return agg
+
+    # Try the raw field name directly
+    if sf_raw and results and sf_raw in results[0]:
+        agg = _aggregate_by_field(results, sf_raw, sf_raw, "Count")
+        logger.info(
+            "Direct field aggregation: %d items -> %d unique '%s' values",
+            len(results), len(agg), sf_raw,
         )
         return agg
 
     # No aggregation possible - return raw results
+    logger.warning(
+        "No aggregation rule for '%s' with sorting='%s'. "
+        "Available fields: %s. Exporting raw data.",
+        search_name, sorting_field,
+        list(results[0].keys())[:10] if results else "none",
+    )
     return results
 
 
@@ -334,91 +404,35 @@ def export_to_excel(data: List[Dict[str, Any]], filepath: str) -> None:
 # PowerPoint report (optional, best-effort)
 # ---------------------------------------------------------------------------
 def generate_ppt_report(excel_dir: str, output_path: str, template_path: Optional[str] = None) -> bool:
-    """Generate a PowerPoint report from Excel files.
+    """Generate a PowerPoint report by updating charts in the template.
 
-    Attempts to import python-pptx. If unavailable or if the template does not
-    exist, this step is silently skipped (it is not critical).
+    Uses the generate_ppt_report module which updates existing charts in the
+    v2.0 NDR Security Assessment template, preserving all styling and 3D effects.
     """
     try:
-        from pptx import Presentation
-        from pptx.util import Inches, Pt
-        from pptx.enum.text import PP_ALIGN
-    except ImportError:
-        logger.warning("python-pptx not installed; skipping PowerPoint generation.")
-        return False
-
-    excel_files = sorted(Path(excel_dir).glob("*.xlsx"))
-    if not excel_files:
-        logger.warning("No Excel files found in %s; skipping PowerPoint.", excel_dir)
-        return False
-
-    # Use template if provided and exists, otherwise blank
-    if template_path and Path(template_path).exists():
-        prs = Presentation(template_path)
-        logger.info("Using PowerPoint template: %s", template_path)
-    else:
-        prs = Presentation()
-        logger.info("Creating blank PowerPoint (no template found).")
-
-    # Title slide
-    slide_layout = prs.slide_layouts[0]
-    slide = prs.slides.add_slide(slide_layout)
-    title_shape = slide.shapes.title
-    if title_shape:
-        title_shape.text = "Security Assessment Report"
-    if slide.placeholders and len(slide.placeholders) > 1:
-        slide.placeholders[1].text = f"Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
-
-    # One slide per Excel file
-    for xf in excel_files:
-        try:
-            df = pd.read_excel(xf, engine="openpyxl")
-            if df.empty:
-                continue
-
-            slide_layout = prs.slide_layouts[5] if len(prs.slide_layouts) > 5 else prs.slide_layouts[0]
-            slide = prs.slides.add_slide(slide_layout)
-
-            # Title from filename
-            stem = xf.stem.replace("_", " ")
-            if slide.shapes.title:
-                slide.shapes.title.text = stem
-
-            # Build a small table
-            rows_to_show = min(len(df) + 1, 21)  # header + up to 20 data rows
-            cols_to_show = min(len(df.columns), 6)
-
-            left = Inches(0.5)
-            top = Inches(1.8)
-            width = Inches(9.0)
-            height = Inches(0.4 * rows_to_show)
-
-            table_shape = slide.shapes.add_table(
-                rows_to_show, cols_to_show, left, top, width, height
+        # Import the dedicated PPT generator module
+        import importlib.util
+        module_path = Path(__file__).parent / "generate_ppt_report.py"
+        if module_path.exists():
+            spec = importlib.util.spec_from_file_location("generate_ppt_report", module_path)
+            ppt_mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(ppt_mod)
+            result = ppt_mod.generate_report(
+                template_path=template_path or str(Path(__file__).parent.parent / "templates" / "NDR_Security_Assessment.pptx"),
+                data_dir=excel_dir,
+                output_path=output_path,
             )
-            table = table_shape.table
-
-            # Header
-            for c_idx in range(cols_to_show):
-                cell = table.cell(0, c_idx)
-                cell.text = str(df.columns[c_idx])
-
-            # Data rows
-            for r_idx in range(1, rows_to_show):
-                for c_idx in range(cols_to_show):
-                    cell = table.cell(r_idx, c_idx)
-                    cell.text = str(df.iloc[r_idx - 1, c_idx])
-
-        except Exception as exc:
-            logger.warning("Could not add slide for %s: %s", xf.name, exc)
-            continue
-
-    try:
-        prs.save(output_path)
-        logger.info("PowerPoint report saved to %s", output_path)
-        return True
+            if result:
+                logger.info("PowerPoint report saved to %s (using template)", output_path)
+                return True
+            else:
+                logger.warning("PowerPoint generation returned None - template may not exist")
+                return False
+        else:
+            logger.warning("generate_ppt_report.py module not found at %s", module_path)
+            return False
     except Exception as exc:
-        logger.error("Failed to save PowerPoint: %s", exc)
+        logger.error("Failed to generate PowerPoint report: %s", exc)
         return False
 
 

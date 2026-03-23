@@ -14,14 +14,14 @@ objects, preserving all styling, colours, 3D effects, and layout.
 
 Usage (CLI):
     python generate_ppt_report.py \\
-        --template templates/NDR_Security_Assessment_v2.0.pptx \\
+        --template templates/NDR_Security_Assessment.pptx \\
         --data-dir output_directory \\
         --output reports/final_report.pptx
 
 Usage (module):
     from generate_ppt_report import generate_report
     path = generate_report(
-        template_path="templates/NDR_Security_Assessment_v2.0.pptx",
+        template_path="templates/NDR_Security_Assessment.pptx",
         data_dir="output_directory",
         output_path="reports/final_report.pptx",
     )
@@ -110,7 +110,7 @@ MAX_CHART_CATEGORIES = 15
 MAX_TABLE_ROWS = 10
 
 # Default template location (relative to repository root)
-DEFAULT_TEMPLATE = "templates/NDR_Security_Assessment_v2.0.pptx"
+DEFAULT_TEMPLATE = "templates/NDR_Security_Assessment.pptx"
 
 
 # ---------------------------------------------------------------------------
