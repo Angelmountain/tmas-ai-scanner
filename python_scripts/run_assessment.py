@@ -270,6 +270,16 @@ _AGGREGATION_RULES: Dict[Tuple[str, str], Tuple[str, str, str]] = {
     ("us vendors", "hostname"): ("US Tech Company", "Access Count", "hostName"),
     # External threats
     ("external attacks", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+    ("web rep ru", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+    ("rdp detections", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+    ("dns dead ip", "rulename"): ("Rule Name", "Detection Count", "ruleName"),
+    # File/cert downloads
+    ("file downloads", "request"): ("Download URL", "Download Count", "request"),
+    ("cert downloads", "request"): ("Certificate URL", "Download Count", "request"),
+    # External connections
+    ("external rdp", "serverip"): ("External Server IP", "Connection Count", "serverIp"),
+    ("external ssh", "serverip"): ("External Server IP", "Connection Count", "serverIp"),
+    ("external protocols", "app"): ("Protocol", "Connection Count", "app"),
 }
 
 # Map sorting field names from CSV to actual API response field names
@@ -288,6 +298,7 @@ _FIELD_NAME_MAP: Dict[str, str] = {
     "filename": "fileName",
     "filetype": "fileType",
     "respappversion": "respAppVersion",
+    "request": "request",
 }
 
 

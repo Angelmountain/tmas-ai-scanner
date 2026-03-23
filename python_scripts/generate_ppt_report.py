@@ -100,9 +100,21 @@ SLIDE_MAPPING: Dict[str, Optional[int]] = {
     "Suspicious TLDs": 33,           # slide title: ".CH requests"
     "Bad States": 34,                # slide title: ".RU requests"
     "Russian IT-companies": 35,
+    "Chinese IT-companies": 36,         # May not have chart in template
     "EPP/EDR/XDR Vendors": 37,
     "Firewall Vendors": 38,
     "US Vendors": 39,
+    # Additional searches from GitHub Actions (data table only if no slide)
+    "External Attacks": 40,
+    "Web Rep RU": 41,
+    "RDP Detections": 42,
+    "Root Detections": 21,               # Same as PUA root detections
+    "DNS Dead IP": None,
+    "File Downloads": None,
+    "Cert Downloads": None,
+    "External RDP": None,
+    "External SSH": None,
+    "External Protocols": None,
 }
 
 # Maximum categories shown per chart / fallback table
