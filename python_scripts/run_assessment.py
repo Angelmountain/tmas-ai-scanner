@@ -147,6 +147,7 @@ class VisionOneClient:
         start_time: str,
         end_time: str,
         query: Optional[str] = None,
+        select: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Search a single time chunk with pagination."""
         url = f"{self.base_url}{self.ENDPOINTS[log_type]}"
@@ -167,6 +168,8 @@ class VisionOneClient:
                     "endDateTime": end_time,
                     "top": PAGE_SIZE,
                 }
+                if select:
+                    params["select"] = select
                 if next_link:
                     params["nextPageToken"] = next_link
                 request_url = url
@@ -211,12 +214,15 @@ class VisionOneClient:
         start_time: str,
         end_time: str,
         query: Optional[str] = None,
+        sorting_field: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a search with time-chunking to bypass the 10K record limit.
 
         The Vision One API returns max ~10,000 records per search. To get
-        full data across a 30-day window, we split into 24-hour chunks and
-        merge results. Each chunk can return up to 10K records.
+        the full dataset we split into 6-hour chunks and merge results.
+
+        Uses ``select`` to request only the aggregation field, which makes
+        records tiny and allows more to fit within the 10K-per-page limit.
         """
         if log_type not in ("network", "detections", "everything"):
             logger.error("Invalid log type '%s'.", log_type)
@@ -226,41 +232,49 @@ class VisionOneClient:
             ["network", "detections"] if log_type == "everything" else [log_type]
         )
 
-        # Calculate time chunks (24-hour windows)
+        # Build select parameter for network searches (detections API ignores it)
+        select = None
+        if sorting_field and log_type == "network":
+            sf_lower = sorting_field.strip().lower()
+            api_field = _FIELD_NAME_MAP.get(sf_lower, sorting_field.strip())
+            if api_field:
+                select = api_field
+
+        # Calculate time chunks — 6-hour windows for maximum coverage
         start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
-        chunk_hours = 24  # 24-hour chunks
-        num_chunks = max(1, int(duration_hours / chunk_hours))
+        chunk_hours = 6
+        num_chunks = max(1, int(duration_hours / chunk_hours) + 1)
 
         all_results: List[Dict[str, Any]] = []
 
         for lt in log_types:
+            sel = select if lt == "network" else None
             logger.info(
-                "Searching %s | %d chunks of %dh | query: %s",
-                lt, num_chunks, chunk_hours, (query or "")[:80],
+                "Searching %s | %d chunks of %dh | select=%s | query: %s",
+                lt, num_chunks, chunk_hours, sel, (query or "")[:80],
             )
 
             chunk_start = start_dt
             for chunk_idx in range(num_chunks):
                 chunk_end = min(chunk_start + timedelta(hours=chunk_hours), end_dt)
+                if chunk_start >= end_dt:
+                    break
                 cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
                 ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                items = self._search_chunk(lt, cs, ce, query=query)
+                items = self._search_chunk(lt, cs, ce, query=query, select=sel)
                 if items:
                     all_results.extend(items)
-                    logger.info(
-                        "Chunk %d/%d: %d items (total: %d)",
-                        chunk_idx + 1, num_chunks, len(items), len(all_results),
-                    )
+                    if chunk_idx % 10 == 0 or len(items) >= 9000:
+                        logger.info(
+                            "Chunk %d/%d: %d items (total: %d)",
+                            chunk_idx + 1, num_chunks, len(items), len(all_results),
+                        )
 
                 chunk_start = chunk_end
-                if chunk_start >= end_dt:
-                    break
-
-                # Small delay between chunks to avoid rate limiting
-                time.sleep(0.3)
+                time.sleep(0.15)  # Rate limit friendly
 
             logger.info("Completed %s search. Total items: %d", lt, len(all_results))
 
@@ -534,11 +548,9 @@ def process_single_search(
     )
 
     try:
-        # Don't use select parameter - many fields (suid, hostName, etc.)
-        # only appear on certain record types. Filtering with select causes
-        # data loss for searches that need sparse fields across many records.
         results = client.search_logs(
             log_type, start_time, end_time, query=query,
+            sorting_field=sorting_field,
         )
 
         if results:
