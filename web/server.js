@@ -363,9 +363,17 @@ app.get('/api/assessment/results/:jobId', (req, res) => {
 
   const jobDir = path.join(JOBS_DIR, req.params.jobId);
   const summaryPath = path.join(jobDir, 'summary.json');
-  let summary = job.results;
-  if (!summary && fs.existsSync(summaryPath)) {
+
+  // The Python script emits: {type:"complete", summary:{total, with_data, total_records, search_results}}
+  // We want to return the inner summary object directly
+  let summary = null;
+  // First try reading the saved summary.json (most reliable)
+  if (fs.existsSync(summaryPath)) {
     try { summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')); } catch (e) { /* ignore */ }
+  }
+  // Fallback: extract from in-memory job results
+  if (!summary && job.results) {
+    summary = job.results.summary || job.results;
   }
 
   // List Excel files
