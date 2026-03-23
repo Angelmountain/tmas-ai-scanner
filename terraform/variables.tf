@@ -18,9 +18,15 @@ variable "instance_type" {
   default     = "t3.medium"
 }
 
+variable "allowed_cidrs" {
+  description = "CIDR blocks allowed to access the platform"
+  type        = list(string)
+  default     = ["162.120.188.91/32", "162.120.188.0/24", "94.254.60.123/32"]
+}
+
 variable "admin_cidr" {
   description = "CIDR block allowed for SSH access"
-  default     = "0.0.0.0/0"
+  default     = "162.120.188.0/24"
 }
 
 variable "ssh_key_name" {
