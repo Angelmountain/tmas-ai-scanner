@@ -26,7 +26,7 @@ variable "allowed_cidrs" {
 
 variable "admin_cidr" {
   description = "CIDR block allowed for SSH access"
-  default     = "162.120.188.0/24"
+  default     = "51.20.105.44/32"
 }
 
 variable "ssh_key_name" {

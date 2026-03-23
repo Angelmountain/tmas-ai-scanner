@@ -351,28 +351,36 @@ app.post('/api/assessment/run', async (req, res) => {
 // ─── Assessment: Status / Results / Download ────────────────────────────────
 app.get('/api/assessment/status/:jobId', (req, res) => {
   const job = jobs.get(req.params.jobId);
-  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (!job) {
+    // Check if job exists on disk (after server restart)
+    const statePath = path.join(JOBS_DIR, req.params.jobId, 'state.json');
+    if (fs.existsSync(statePath)) {
+      try {
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        return res.json({ ...state, console: '' });
+      } catch (e) { /* fall through */ }
+    }
+    return res.status(404).json({ error: 'Job not found' });
+  }
   const { _proc, console: lines, ...safe } = job;
   const recentConsole = lines.slice(-50).map(l => l.text).join('');
   res.json({ ...safe, console: recentConsole });
 });
 
 app.get('/api/assessment/results/:jobId', (req, res) => {
-  const job = jobs.get(req.params.jobId);
-  if (!job) return res.status(404).json({ error: 'Job not found' });
-
   const jobDir = path.join(JOBS_DIR, req.params.jobId);
+  if (!fs.existsSync(jobDir)) return res.status(404).json({ error: 'Job not found' });
+
+  const job = jobs.get(req.params.jobId);
   const summaryPath = path.join(jobDir, 'summary.json');
 
-  // The Python script emits: {type:"complete", summary:{total, with_data, total_records, search_results}}
-  // We want to return the inner summary object directly
+  // Read summary.json (persisted by Python script - survives server restarts)
   let summary = null;
-  // First try reading the saved summary.json (most reliable)
   if (fs.existsSync(summaryPath)) {
     try { summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8')); } catch (e) { /* ignore */ }
   }
   // Fallback: extract from in-memory job results
-  if (!summary && job.results) {
+  if (!summary && job && job.results) {
     summary = job.results.summary || job.results;
   }
 
