@@ -2,7 +2,25 @@
 *.pyc
 __pycache__/
 venv/
+.venv/
 results/*.json
 results/*.html
 config.yaml
 .DS_Store
+
+# Web app
+web/node_modules/
+web/certs/
+data/
+*.xlsx
+*.pptx
+!templates/*.pptx
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/*.tfplan
+
+# TMAS binary
+tmas

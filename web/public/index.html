@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Security Assessment Platform</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+/* ═══ CSS Variables ═══ */
+:root {
+  --bg: #0a0e1a;
+  --bg2: #111827;
+  --bg3: #1f2937;
+  --bg4: #283548;
+  --border: #1e293b;
+  --border2: #334155;
+  --text: #e2e8f0;
+  --text2: #94a3b8;
+  --text3: #64748b;
+  --primary: #3b82f6;
+  --primary-dim: #1e40af;
+  --danger: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --cyan: #06b6d4;
+  --purple: #8b5cf6;
+  --trend-red: #d52b1e;
+  --sidebar-w: 280px;
+  --header-h: 56px;
+  --radius: 8px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+a { color: var(--primary); text-decoration: none; }
+button { cursor: pointer; font-family: inherit; font-size: 13px; }
+code, pre, .mono { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 12px; }
+input, select, textarea { font-family: inherit; font-size: 13px; background: var(--bg2); color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 8px 12px; outline: none; }
+input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ═══ Layout ═══ */
+.app { display: grid; grid-template-rows: var(--header-h) 1fr; grid-template-columns: var(--sidebar-w) 1fr; height: 100vh; overflow: hidden; }
+
+/* ═══ Header ═══ */
+.header { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; background: var(--bg2); border-bottom: 1px solid var(--border); z-index: 10; }
+.header-left { display: flex; align-items: center; gap: 12px; }
+.header-logo { width: 28px; height: 28px; background: var(--trend-red); border-radius: 6px; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 14px; }
+.header-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.header-subtitle { font-size: 12px; color: var(--text3); margin-left: 8px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.status-badge { display: flex; align-items: center; gap: 6px; padding: 4px 10px; background: var(--bg3); border-radius: 12px; font-size: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.ok { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.status-dot.busy { background: var(--warning); animation: pulse 1.5s infinite; }
+.status-dot.error { background: var(--danger); }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ═══ Sidebar ═══ */
+.sidebar { background: var(--bg2); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px 0; }
+.sidebar-section { padding: 8px 16px 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text3); }
+.sidebar-item { display: flex; align-items: center; gap: 10px; padding: 8px 16px; cursor: pointer; transition: all .15s; border-left: 3px solid transparent; color: var(--text2); }
+.sidebar-item:hover { background: var(--bg3); color: var(--text); }
+.sidebar-item.active { background: rgba(59,130,246,.08); border-left-color: var(--primary); color: var(--primary); }
+.sidebar-icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 13px; border-radius: 4px; flex-shrink: 0; }
+.sidebar-icon.blue { background: rgba(59,130,246,.15); color: var(--primary); }
+.sidebar-icon.red { background: rgba(239,68,68,.15); color: var(--danger); }
+.sidebar-icon.green { background: rgba(16,185,129,.15); color: var(--success); }
+.sidebar-icon.purple { background: rgba(139,92,246,.15); color: var(--purple); }
+.sidebar-icon.cyan { background: rgba(6,182,212,.15); color: var(--cyan); }
+.sidebar-icon.amber { background: rgba(245,158,11,.15); color: var(--warning); }
+.sidebar-label { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar-count { margin-left: auto; background: var(--bg4); padding: 1px 6px; border-radius: 8px; font-size: 11px; color: var(--text3); }
+
+/* ═══ Main Content ═══ */
+.main { overflow-y: auto; padding: 24px; }
+.view { display: none; }
+.view.active { display: block; }
+
+/* ═══ Cards ═══ */
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; }
+.card-header { display: flex; align-items: center; gap: 12px; padding: 14px 16px; cursor: pointer; }
+.card-header:hover { background: var(--bg3); border-radius: var(--radius) var(--radius) 0 0; }
+.card-title { font-weight: 600; font-size: 14px; flex: 1; }
+.card-badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.card-badge.success { background: rgba(16,185,129,.15); color: var(--success); }
+.card-badge.warning { background: rgba(245,158,11,.15); color: var(--warning); }
+.card-badge.danger { background: rgba(239,68,68,.15); color: var(--danger); }
+.card-badge.info { background: rgba(59,130,246,.15); color: var(--primary); }
+.card-toggle { font-size: 18px; color: var(--text3); transition: transform .2s; }
+.card-toggle.open { transform: rotate(90deg); }
+.card-body { padding: 0 16px 16px; display: none; }
+.card-body.open { display: block; }
+
+/* ═══ Form Elements ═══ */
+.form-group { margin-bottom: 14px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+.form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.form-row > * { flex: 1; min-width: 200px; }
+.form-hint { font-size: 11px; color: var(--text3); margin-top: 2px; }
+select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8'%3E%3Cpath d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+textarea { resize: vertical; min-height: 60px; }
+
+/* ═══ Buttons ═══ */
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 500; transition: all .15s; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #2563eb; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-secondary { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--bg4); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+
+/* ═══ Stats Grid ═══ */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; }
+.stat-value { font-size: 24px; font-weight: 700; }
+.stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; margin-top: 2px; }
+.stat-card.primary .stat-value { color: var(--primary); }
+.stat-card.success .stat-value { color: var(--success); }
+.stat-card.danger .stat-value { color: var(--danger); }
+.stat-card.warning .stat-value { color: var(--warning); }
+
+/* ═══ Progress ═══ */
+.progress-container { margin: 16px 0; }
+.progress-bar-bg { height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--primary), var(--cyan)); border-radius: 4px; transition: width .3s; }
+.progress-text { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text2); }
+
+/* ═══ Console ═══ */
+.console-output { background: #000; border: 1px solid var(--border); border-radius: 6px; padding: 12px; max-height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: #a0aec0; white-space: pre-wrap; word-break: break-all; }
+
+/* ═══ Data Table ═══ */
+.data-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.data-table th { background: var(--bg3); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: var(--text3); padding: 8px 12px; text-align: left; position: sticky; top: 0; }
+.data-table td { padding: 6px 12px; border-top: 1px solid var(--border); font-size: 13px; }
+.data-table tr:hover td { background: rgba(59,130,246,.04); }
+.data-table-wrap { max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; }
+
+/* ═══ Chart Container ═══ */
+.chart-container { position: relative; width: 100%; max-height: 350px; margin: 12px 0; }
+
+/* ═══ Search Cards (assessment) ═══ */
+.search-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; margin: 16px 0; }
+.search-card { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; align-items: center; gap: 10px; cursor: pointer; transition: all .15s; }
+.search-card:hover { border-color: var(--primary); }
+.search-card.selected { border-color: var(--primary); background: rgba(59,130,246,.08); }
+.search-card-check { width: 18px; height: 18px; border: 2px solid var(--border2); border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; color: transparent; }
+.search-card.selected .search-card-check { background: var(--primary); border-color: var(--primary); color: #fff; }
+.search-card-info { min-width: 0; }
+.search-card-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-card-desc { font-size: 11px; color: var(--text3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ═══ Drag & Drop Zone ═══ */
+.dropzone { border: 2px dashed var(--border2); border-radius: var(--radius); padding: 40px 20px; text-align: center; transition: all .2s; cursor: pointer; }
+.dropzone:hover, .dropzone.dragover { border-color: var(--primary); background: rgba(59,130,246,.05); }
+.dropzone-icon { font-size: 36px; margin-bottom: 8px; }
+.dropzone-text { font-size: 14px; color: var(--text2); }
+.dropzone-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+/* ═══ Tabs ═══ */
+.tab-bar { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+.tab-btn { padding: 8px 16px; background: none; border: none; color: var(--text3); font-size: 13px; border-bottom: 2px solid transparent; }
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ═══ GitHub Actions ═══ */
+.run-status { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 10px; font-size: 12px; font-weight: 500; }
+.run-status.completed { background: rgba(16,185,129,.12); color: var(--success); }
+.run-status.in_progress { background: rgba(245,158,11,.12); color: var(--warning); }
+.run-status.queued { background: rgba(59,130,246,.12); color: var(--primary); }
+.run-status.failure { background: rgba(239,68,68,.12); color: var(--danger); }
+.run-status .status-dot { width: 6px; height: 6px; }
+
+/* ═══ Risk Badge ═══ */
+.risk-badge { display: inline-flex; align-items: center; padding: 6px 14px; border-radius: 6px; font-size: 18px; font-weight: 700; }
+.risk-badge.critical { background: rgba(239,68,68,.15); color: var(--danger); }
+.risk-badge.high { background: rgba(245,158,11,.15); color: #fd7e14; }
+.risk-badge.medium { background: rgba(245,158,11,.15); color: var(--warning); }
+.risk-badge.low { background: rgba(16,185,129,.15); color: var(--success); }
+
+/* ═══ CSV Documentation ═══ */
+.doc-panel { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 16px; }
+.doc-panel h3 { font-size: 14px; margin-bottom: 8px; color: var(--text); }
+.doc-panel table { width: 100%; font-size: 12px; }
+.doc-panel table th { text-align: left; color: var(--text2); padding: 4px 8px; }
+.doc-panel table td { padding: 4px 8px; color: var(--text); }
+.doc-panel code { background: var(--bg); padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+
+/* ═══ Empty State ═══ */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text3); }
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state-text { font-size: 16px; }
+.empty-state-hint { font-size: 13px; margin-top: 6px; }
+
+/* ═══ Notification Toast ═══ */
+.toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; font-size: 13px; z-index: 1000; animation: slideIn .3s; max-width: 400px; }
+.toast.success { background: var(--success); color: #fff; }
+.toast.error { background: var(--danger); color: #fff; }
+.toast.info { background: var(--primary); color: #fff; }
+@keyframes slideIn { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="app">
+<!-- ═══ Header ═══ -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo">S</div>
+    <span class="header-title">Security Assessment Platform</span>
+    <span class="header-subtitle">Vision One + TMAS AI Scanner</span>
+  </div>
+  <div class="header-right">
+    <div class="status-badge"><div class="status-dot ok" id="statusDot"></div><span id="statusText">Online</span></div>
+  </div>
+</header>
+
+<!-- ═══ Sidebar ═══ -->
+<nav class="sidebar">
+  <div class="sidebar-section">Assessment</div>
+  <div class="sidebar-item active" onclick="showView('assessment')" data-view="assessment">
+    <span class="sidebar-icon blue">&#9783;</span><span class="sidebar-label">Pre-built Searches</span>
+  </div>
+  <div class="sidebar-item" onclick="showView('csv')" data-view="csv">
+    <span class="sidebar-icon green">&#8686;</span><span class="sidebar-label">Custom CSV Upload</span>
+  </div>
+
+  <div class="sidebar-section">AI Security</div>
+  <div class="sidebar-item" onclick="showView('aiscan')" data-view="aiscan">
+    <span class="sidebar-icon purple">&#9889;</span><span class="sidebar-label">AI Scan (TMAS)</span>
+  </div>
+
+  <div class="sidebar-section">GitHub Actions</div>
+  <div class="sidebar-item" onclick="showView('github')" data-view="github">
+    <span class="sidebar-icon cyan">&#9881;</span><span class="sidebar-label">Workflow Runs</span>
+  </div>
+  <div class="sidebar-item" onclick="showView('dispatch')" data-view="dispatch">
+    <span class="sidebar-icon amber">&#9654;</span><span class="sidebar-label">Trigger Workflow</span>
+  </div>
+
+  <div class="sidebar-section">Reports</div>
+  <div class="sidebar-item" onclick="showView('history')" data-view="history">
+    <span class="sidebar-icon red">&#128196;</span><span class="sidebar-label">History</span>
+  </div>
+</nav>
+
+<!-- ═══ Main Content ═══ -->
+<main class="main">
+
+<!-- ═══ ASSESSMENT VIEW ═══ -->
+<div class="view active" id="view-assessment">
+  <h2 style="margin-bottom:16px">Security Assessment</h2>
+
+  <!-- Config -->
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">Configuration</span>
+      <span class="card-toggle open">&#9656;</span>
+    </div>
+    <div class="card-body open">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Vision One API Key</label>
+          <input type="password" id="v1ApiKey" placeholder="Enter your Vision One API key" style="width:100%">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vision One Region</label>
+          <select id="v1Region" style="width:100%">
+            <option value="https://api.eu.xdr.trendmicro.com">EU (api.eu.xdr.trendmicro.com)</option>
+            <option value="https://api.xdr.trendmicro.com">US (api.xdr.trendmicro.com)</option>
+            <option value="https://api.xdr.trendmicro.co.jp">JP (api.xdr.trendmicro.co.jp)</option>
+            <option value="https://api.au.xdr.trendmicro.com">AU (api.au.xdr.trendmicro.com)</option>
+            <option value="https://api.in.xdr.trendmicro.com">IN (api.in.xdr.trendmicro.com)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Time Interval</label>
+          <select id="v1TimeInterval" style="width:100%">
+            <option value="24">Last 24 hours</option>
+            <option value="48">Last 48 hours</option>
+            <option value="168">Last 7 days</option>
+            <option value="720" selected>Last 30 days</option>
+            <option value="2160">Last 90 days</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pre-built Searches -->
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <h3>Pre-built Searches</h3>
+    <div>
+      <button class="btn btn-sm btn-secondary" onclick="toggleAllSearches(true)">Select All</button>
+      <button class="btn btn-sm btn-secondary" onclick="toggleAllSearches(false)">Deselect All</button>
+    </div>
+  </div>
+  <div class="search-grid" id="searchGrid">
+    <div class="empty-state"><div class="empty-state-text">Loading searches...</div></div>
+  </div>
+
+  <!-- Run Button -->
+  <div class="btn-group" style="margin-top:16px">
+    <button class="btn btn-primary" id="btnRunAssessment" onclick="runAssessment()">Run Assessment</button>
+  </div>
+
+  <!-- Progress -->
+  <div id="assessmentProgress" style="display:none;margin-top:20px">
+    <div class="progress-container">
+      <div class="progress-bar-bg"><div class="progress-bar" id="assessmentBar" style="width:0%"></div></div>
+      <div class="progress-text"><span id="assessmentProgressText">Starting...</span><span id="assessmentProgressPct">0%</span></div>
+    </div>
+    <div class="console-output mono" id="assessmentConsole"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="assessmentResults" style="display:none;margin-top:20px">
+    <h3 style="margin-bottom:12px">Results</h3>
+    <div class="stats-grid" id="assessmentStats"></div>
+    <div class="btn-group" style="margin-bottom:16px">
+      <button class="btn btn-primary" onclick="downloadAssessment('zip')">Download All (ZIP)</button>
+      <button class="btn btn-secondary" onclick="downloadAssessment('ppt')">Download PowerPoint</button>
+    </div>
+    <div id="assessmentCharts"></div>
+  </div>
+</div>
+
+<!-- ═══ CSV UPLOAD VIEW ═══ -->
+<div class="view" id="view-csv">
+  <h2 style="margin-bottom:16px">Custom CSV Upload</h2>
+
+  <!-- Documentation -->
+  <div class="doc-panel">
+    <h3>CSV Format Documentation</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Upload a CSV file with your custom search queries. The CSV must follow this format:</p>
+    <table>
+      <tr><th>Column</th><th>Required</th><th>Description</th><th>Example</th></tr>
+      <tr><td><code>name</code></td><td>Yes</td><td>Display name for the search</td><td>AI_Usage_OpenAI</td></tr>
+      <tr><td><code>query</code></td><td>Yes</td><td>TMV1 search query</td><td>hostName:(*.openai.com)</td></tr>
+      <tr><td><code>description</code></td><td>No</td><td>Human-readable description</td><td>Monitor OpenAI usage</td></tr>
+      <tr><td><code>sorting</code></td><td>No</td><td>Field to aggregate by</td><td>hostnameDNS, ruleName, app</td></tr>
+      <tr><td><code>log_type</code></td><td>No</td><td>API endpoint type</td><td>network, detections</td></tr>
+      <tr><td><code>orientation</code></td><td>No</td><td>Chart orientation</td><td>horizontal, vertical</td></tr>
+    </table>
+    <h3 style="margin-top:14px">Query Syntax (TMV1-Query)</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:6px">Use Trend Micro Vision One query syntax:</p>
+    <div style="font-size:12px;color:var(--text)">
+      <code>hostName:(*.example.com)</code> - Match hostnames<br>
+      <code>app:(RDP OR SSH)</code> - Match applications<br>
+      <code>dstPort:(22 OR 3389)</code> - Match destination ports<br>
+      <code>ruleName:(*SSH*)</code> - Match detection rules<br>
+      <code>suid:(administrator)</code> - Match user accounts<br>
+      <code>(productCode:pdi OR productCode:xns)</code> - Filter by sensor type
+    </div>
+  </div>
+
+  <!-- Template Downloads -->
+  <div style="margin-bottom:16px">
+    <span class="form-label" style="display:inline;margin-right:8px">Download Template:</span>
+    <button class="btn btn-sm btn-secondary" onclick="downloadTemplate('basic')">Basic</button>
+    <button class="btn btn-sm btn-secondary" onclick="downloadTemplate('ai_services')">AI Services</button>
+    <button class="btn btn-sm btn-secondary" onclick="downloadTemplate('cloud_storage')">Cloud Storage</button>
+    <button class="btn btn-sm btn-secondary" onclick="downloadTemplate('remote_access')">Remote Access</button>
+    <button class="btn btn-sm btn-secondary" onclick="downloadTemplate('geographic')">Geographic</button>
+  </div>
+
+  <!-- Dropzone -->
+  <div class="dropzone" id="csvDropzone" onclick="document.getElementById('csvFileInput').click()">
+    <div class="dropzone-icon">&#128196;</div>
+    <div class="dropzone-text">Drag &amp; drop your CSV file here</div>
+    <div class="dropzone-hint">or click to browse (max 2MB)</div>
+    <input type="file" id="csvFileInput" accept=".csv" style="display:none" onchange="handleCSVFile(this.files[0])">
+  </div>
+
+  <!-- CSV Preview -->
+  <div id="csvPreview" style="display:none;margin-top:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h3>Preview <span id="csvPreviewCount" style="font-weight:400;color:var(--text3)"></span></h3>
+      <div>
+        <button class="btn btn-sm btn-secondary" onclick="toggleAllCsvSearches(true)">Select All</button>
+        <button class="btn btn-sm btn-secondary" onclick="toggleAllCsvSearches(false)">Deselect All</button>
+      </div>
+    </div>
+    <div id="csvWarnings"></div>
+    <div class="data-table-wrap" id="csvPreviewTable"></div>
+    <div class="btn-group">
+      <button class="btn btn-primary" onclick="runCustomAssessment()">Run Custom Assessment</button>
+      <button class="btn btn-secondary" onclick="clearCSV()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AI SCAN VIEW ═══ -->
+<div class="view" id="view-aiscan">
+  <h2 style="margin-bottom:16px">AI Security Scan (TMAS)</h2>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Test LLM endpoints against OWASP LLM Top 10 and MITRE ATT&CK frameworks using Trend Micro Artifact Scanner.</p>
+
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <span class="card-title">Scan Configuration</span>
+      <span class="card-toggle open">&#9656;</span>
+    </div>
+    <div class="card-body open">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">LLM Provider</label>
+          <select id="aiProvider" style="width:100%" onchange="updateProviderDefaults()">
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic (via LiteLLM)</option>
+            <option value="ollama">Ollama (local)</option>
+            <option value="azure_openai">Azure OpenAI</option>
+            <option value="custom">Custom Endpoint</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Endpoint URL</label>
+          <input type="text" id="aiEndpoint" placeholder="https://api.openai.com/v1" style="width:100%">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Model</label>
+          <input type="text" id="aiModel" value="gpt-4" style="width:100%">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">LLM API Key</label>
+          <input type="password" id="aiLlmKey" placeholder="LLM API key (not needed for Ollama)" style="width:100%">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Vision One API Key (for TMAS)</label>
+          <input type="password" id="aiV1Key" placeholder="Vision One API key" style="width:100%">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Attack Preset</label>
+          <select id="aiPreset" style="width:100%">
+            <option value="owasp">OWASP LLM Top 10</option>
+            <option value="mitre">MITRE ATT&CK</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">TMAS Region</label>
+          <select id="aiRegion" style="width:100%">
+            <option value="eu-central-1" selected>eu-central-1</option>
+            <option value="us-east-1">us-east-1</option>
+            <option value="ap-southeast-2">ap-southeast-2</option>
+            <option value="ap-south-1">ap-south-1</option>
+            <option value="ap-northeast-1">ap-northeast-1</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Timeout (seconds)</label>
+          <input type="number" id="aiTimeout" value="3600" min="60" max="7200" style="width:100%">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">System Prompt (optional)</label>
+        <textarea id="aiSystemPrompt" placeholder="Custom system prompt for the LLM..." style="width:100%"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-group">
+    <button class="btn btn-primary" id="btnRunAiScan" onclick="runAiScan()">Run AI Scan</button>
+  </div>
+
+  <!-- AI Scan Progress -->
+  <div id="aiScanProgress" style="display:none;margin-top:20px">
+    <div class="progress-container">
+      <div class="progress-bar-bg"><div class="progress-bar" id="aiScanBar" style="width:0%"></div></div>
+      <div class="progress-text"><span id="aiScanProgressText">Starting...</span></div>
+    </div>
+    <div class="console-output mono" id="aiScanConsole"></div>
+  </div>
+
+  <!-- AI Scan Results -->
+  <div id="aiScanResults" style="display:none;margin-top:20px">
+    <h3 style="margin-bottom:12px">Scan Results</h3>
+    <div id="aiScanRisk" style="margin-bottom:12px"></div>
+    <div class="stats-grid" id="aiScanStats"></div>
+    <div class="chart-container" style="max-height:250px;margin-bottom:16px"><canvas id="aiScanChart"></canvas></div>
+    <div class="data-table-wrap" id="aiScanFindings"></div>
+  </div>
+</div>
+
+<!-- ═══ GITHUB ACTIONS VIEW ═══ -->
+<div class="view" id="view-github">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h2>GitHub Actions Workflow Runs</h2>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="ghRepo" onchange="loadGitHubRuns()" style="font-size:12px">
+        <option value="Angelmountain/tmas-ai-scanner">tmas-ai-scanner</option>
+        <option value="Angelmountain/security-assesment">security-assesment</option>
+      </select>
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer">
+        <input type="checkbox" id="ghAutoRefresh" onchange="toggleGhAutoRefresh()"> Auto-refresh
+      </label>
+      <button class="btn btn-sm btn-secondary" onclick="loadGitHubRuns()">Refresh</button>
+    </div>
+  </div>
+  <div id="ghRunsTable">
+    <div class="empty-state"><div class="empty-state-icon">&#9881;</div><div class="empty-state-text">Loading workflow runs...</div></div>
+  </div>
+  <div id="ghRunDetail" style="display:none;margin-top:16px"></div>
+</div>
+
+<!-- ═══ DISPATCH VIEW ═══ -->
+<div class="view" id="view-dispatch">
+  <h2 style="margin-bottom:16px">Trigger GitHub Workflow</h2>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showDispatchTab('ai')">AI Security Scan</button>
+    <button class="tab-btn" onclick="showDispatchTab('assess')">Security Assessment</button>
+  </div>
+
+  <div class="tab-content active" id="dispatch-ai">
+    <div class="card"><div class="card-body open">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Vision One API Key</label><input type="password" id="dAiV1Key" style="width:100%"></div>
+        <div class="form-group"><label class="form-label">LLM Provider</label>
+          <select id="dAiProvider" style="width:100%">
+            <option value="openai">openai</option><option value="anthropic">anthropic</option><option value="ollama">ollama</option><option value="azure_openai">azure_openai</option><option value="custom">custom</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Model</label><input type="text" id="dAiModel" value="gpt-4" style="width:100%"></div>
+        <div class="form-group"><label class="form-label">LLM API Key</label><input type="password" id="dAiLlmKey" style="width:100%"></div>
+        <div class="form-group"><label class="form-label">Attack Preset</label>
+          <select id="dAiPreset" style="width:100%"><option value="owasp">owasp</option><option value="mitre">mitre</option></select>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Region</label>
+        <select id="dAiRegion" style="width:100%"><option value="eu-central-1">eu-central-1</option><option value="us-east-1">us-east-1</option></select>
+      </div>
+      <button class="btn btn-primary" onclick="dispatchAiScan()">Trigger AI Scan Workflow</button>
+    </div></div>
+  </div>
+
+  <div class="tab-content" id="dispatch-assess">
+    <div class="card"><div class="card-body open">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Vision One API Key</label><input type="password" id="dAssessKey" style="width:100%"></div>
+        <div class="form-group"><label class="form-label">Base URL</label>
+          <select id="dAssessUrl" style="width:100%">
+            <option value="https://api.eu.xdr.trendmicro.com">EU</option><option value="https://api.xdr.trendmicro.com">US</option><option value="https://api.xdr.trendmicro.co.jp">JP</option>
+          </select>
+        </div>
+        <div class="form-group"><label class="form-label">Time Interval (hours)</label><input type="number" id="dAssessTime" value="720" style="width:100%"></div>
+      </div>
+      <button class="btn btn-primary" onclick="dispatchAssessment()">Trigger Assessment Workflow</button>
+    </div></div>
+  </div>
+</div>
+
+<!-- ═══ HISTORY VIEW ═══ -->
+<div class="view" id="view-history">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+    <h2>History</h2>
+    <button class="btn btn-sm btn-danger" onclick="clearHistory()">Clear History</button>
+  </div>
+  <div id="historyList">
+    <div class="empty-state"><div class="empty-state-icon">&#128196;</div><div class="empty-state-text">No history yet</div><div class="empty-state-hint">Run an assessment or AI scan to see results here</div></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════════════
+let prebuiltSearches = [];
+let csvSearches = [];
+let activeJobId = null;
+let activeJobType = null;
+let pollInterval = null;
+let ghPollInterval = null;
+let chartInstances = {};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════════
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  const view = document.getElementById('view-' + name);
+  if (view) view.classList.add('active');
+  const item = document.querySelector(`.sidebar-item[data-view="${name}"]`);
+  if (item) item.classList.add('active');
+
+  if (name === 'github') loadGitHubRuns();
+  if (name === 'history') loadHistory();
+}
+
+function toggleCard(header) {
+  const body = header.nextElementSibling;
+  const toggle = header.querySelector('.card-toggle');
+  body.classList.toggle('open');
+  if (toggle) toggle.classList.toggle('open');
+}
+
+function showDispatchTab(tab) {
+  document.querySelectorAll('#view-dispatch .tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#view-dispatch .tab-content').forEach(c => c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('dispatch-' + tab).classList.add('active');
+}
+
+function toast(msg, type = 'info') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ASSESSMENT - PRE-BUILT SEARCHES
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadPrebuiltSearches() {
+  try {
+    const resp = await fetch('/api/searches/prebuilt');
+    const data = await resp.json();
+    prebuiltSearches = data.searches.map(s => ({ ...s, selected: true }));
+    renderSearchGrid();
+  } catch (e) { console.error('Failed to load searches:', e); }
+}
+
+function renderSearchGrid() {
+  const grid = document.getElementById('searchGrid');
+  if (!prebuiltSearches.length) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-state-text">No searches found</div></div>';
+    return;
+  }
+  grid.innerHTML = prebuiltSearches.map((s, i) => `
+    <div class="search-card ${s.selected ? 'selected' : ''}" onclick="toggleSearch(${i})">
+      <div class="search-card-check">${s.selected ? '&#10003;' : ''}</div>
+      <div class="search-card-info">
+        <div class="search-card-name">${esc(s.name)}</div>
+        <div class="search-card-desc">${esc(s.description || s.log_type || '')}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleSearch(i) {
+  prebuiltSearches[i].selected = !prebuiltSearches[i].selected;
+  renderSearchGrid();
+}
+
+function toggleAllSearches(state) {
+  prebuiltSearches.forEach(s => s.selected = state);
+  renderSearchGrid();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ASSESSMENT - RUN
+// ═══════════════════════════════════════════════════════════════════════════════
+async function runAssessment() {
+  const apiKey = document.getElementById('v1ApiKey').value;
+  if (!apiKey) return toast('Please enter your Vision One API key', 'error');
+
+  const selected = prebuiltSearches.filter(s => s.selected);
+  if (!selected.length) return toast('Please select at least one search', 'error');
+
+  document.getElementById('btnRunAssessment').disabled = true;
+  document.getElementById('assessmentProgress').style.display = 'block';
+  document.getElementById('assessmentResults').style.display = 'none';
+  document.getElementById('assessmentConsole').textContent = '';
+
+  try {
+    const resp = await fetch('/api/assessment/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        baseUrl: document.getElementById('v1Region').value,
+        timeInterval: parseInt(document.getElementById('v1TimeInterval').value),
+        searches: selected,
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    activeJobId = data.jobId;
+    activeJobType = 'assessment';
+    pollInterval = setInterval(() => pollAssessmentStatus(data.jobId), 2000);
+  } catch (e) {
+    toast('Failed to start assessment: ' + e.message, 'error');
+    document.getElementById('btnRunAssessment').disabled = false;
+  }
+}
+
+async function pollAssessmentStatus(jobId) {
+  try {
+    const resp = await fetch('/api/assessment/status/' + jobId);
+    const job = await resp.json();
+
+    const pct = job.total > 0 ? Math.round((job.progress / job.total) * 100) : 0;
+    document.getElementById('assessmentBar').style.width = pct + '%';
+    document.getElementById('assessmentProgressPct').textContent = pct + '%';
+    document.getElementById('assessmentProgressText').textContent = job.current ? `Processing: ${job.current}` : (job.status === 'running' ? 'Running...' : job.status);
+
+    if (job.console) {
+      const con = document.getElementById('assessmentConsole');
+      con.textContent = job.console;
+      con.scrollTop = con.scrollHeight;
+    }
+
+    if (job.status !== 'running') {
+      clearInterval(pollInterval);
+      pollInterval = null;
+      document.getElementById('btnRunAssessment').disabled = false;
+      document.getElementById('assessmentBar').style.width = '100%';
+
+      if (job.status === 'completed') {
+        toast('Assessment completed!', 'success');
+        loadAssessmentResults(jobId);
+      } else {
+        toast('Assessment failed: ' + (job.error || 'Unknown error'), 'error');
+      }
+    }
+  } catch (e) { /* keep polling */ }
+}
+
+async function loadAssessmentResults(jobId) {
+  try {
+    const resp = await fetch('/api/assessment/results/' + jobId);
+    const data = await resp.json();
+
+    document.getElementById('assessmentResults').style.display = 'block';
+    activeJobId = jobId;
+
+    // Stats
+    const summary = data.summary || {};
+    document.getElementById('assessmentStats').innerHTML = `
+      <div class="stat-card primary"><div class="stat-value">${summary.total || data.excelFiles.length}</div><div class="stat-label">Total Searches</div></div>
+      <div class="stat-card success"><div class="stat-value">${summary.with_data || data.excelFiles.length}</div><div class="stat-label">With Data</div></div>
+      <div class="stat-card warning"><div class="stat-value">${summary.total_records || '—'}</div><div class="stat-label">Total Records</div></div>
+      <div class="stat-card"><div class="stat-value">${data.hasPpt ? 'Yes' : 'No'}</div><div class="stat-label">PowerPoint Ready</div></div>
+    `;
+
+    // Chart cards for each Excel file
+    const chartsDiv = document.getElementById('assessmentCharts');
+    chartsDiv.innerHTML = '';
+    if (data.excelFiles && data.excelFiles.length > 0) {
+      // We show file names as result cards; actual chart data would come from results
+      const resultData = (summary.search_results || []);
+      for (const file of data.excelFiles) {
+        const searchName = file.name.replace(/_[^_]+_[^_]+\.xlsx$/, '').replace(/_/g, ' ');
+        const rd = resultData.find(r => r.name === searchName) || {};
+        const cardId = 'result-' + file.name.replace(/[^a-z0-9]/gi, '');
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-header" onclick="toggleCard(this)">
+            <span class="card-title">${esc(searchName)}</span>
+            <span class="card-badge ${rd.count > 0 ? 'success' : 'info'}">${rd.count || '?'} results</span>
+            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation();window.location='/api/assessment/excel/${jobId}/${encodeURIComponent(file.name)}'">Download Excel</button>
+            <span class="card-toggle">&#9656;</span>
+          </div>
+          <div class="card-body">
+            ${rd.data ? `<div class="chart-container"><canvas id="chart-${cardId}"></canvas></div>` : ''}
+            ${rd.data ? renderDataTable(rd.data) : '<p style="color:var(--text3);font-size:13px">Download Excel for detailed data</p>'}
+          </div>
+        `;
+        chartsDiv.appendChild(card);
+
+        if (rd.data && rd.data.length > 0) {
+          setTimeout(() => renderBarChart('chart-' + cardId, rd.data, searchName), 100);
+        }
+      }
+    }
+  } catch (e) { toast('Failed to load results: ' + e.message, 'error'); }
+}
+
+function downloadAssessment(type) {
+  if (!activeJobId) return;
+  if (type === 'zip') window.location = '/api/assessment/download/' + activeJobId;
+  if (type === 'ppt') window.location = '/api/assessment/ppt/' + activeJobId;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CSV UPLOAD
+// ═══════════════════════════════════════════════════════════════════════════════
+const dropzone = document.getElementById('csvDropzone');
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files.length) handleCSVFile(e.dataTransfer.files[0]); });
+
+async function handleCSVFile(file) {
+  if (!file || !file.name.endsWith('.csv')) return toast('Please upload a .csv file', 'error');
+  const formData = new FormData();
+  formData.append('csv', file);
+  try {
+    const resp = await fetch('/api/csv/upload', { method: 'POST', body: formData });
+    const data = await resp.json();
+    if (data.error) return toast(data.error, 'error');
+
+    csvSearches = data.searches;
+    document.getElementById('csvPreview').style.display = 'block';
+    document.getElementById('csvPreviewCount').textContent = `(${csvSearches.length} searches)`;
+
+    // Warnings
+    const warnDiv = document.getElementById('csvWarnings');
+    if (data.warnings && data.warnings.length > 0) {
+      warnDiv.innerHTML = data.warnings.map(w => `<div style="color:var(--warning);font-size:12px;margin-bottom:2px">&#9888; ${esc(w)}</div>`).join('');
+    } else { warnDiv.innerHTML = ''; }
+
+    // Preview table
+    renderCsvPreview();
+  } catch (e) { toast('Upload failed: ' + e.message, 'error'); }
+}
+
+function renderCsvPreview() {
+  const wrap = document.getElementById('csvPreviewTable');
+  wrap.innerHTML = `<table class="data-table">
+    <thead><tr><th></th><th>Name</th><th>Log Type</th><th>Sorting</th><th>Query</th></tr></thead>
+    <tbody>${csvSearches.map((s, i) => `
+      <tr style="cursor:pointer" onclick="toggleCsvSearch(${i})">
+        <td><div class="search-card-check" style="width:16px;height:16px;border-radius:3px;border:2px solid ${s.enabled !== false ? 'var(--primary)' : 'var(--border2)'};background:${s.enabled !== false ? 'var(--primary)' : 'transparent'};color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center">${s.enabled !== false ? '&#10003;' : ''}</div></td>
+        <td>${esc(s.name)}</td>
+        <td>${esc(s.log_type || 'auto')}</td>
+        <td>${esc(s.sorting || 'default')}</td>
+        <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(s.query)}">${esc(s.query)}</td>
+      </tr>
+    `).join('')}</tbody></table>`;
+}
+
+function toggleCsvSearch(i) { csvSearches[i].enabled = csvSearches[i].enabled === false ? true : false; renderCsvPreview(); }
+function toggleAllCsvSearches(state) { csvSearches.forEach(s => s.enabled = state); renderCsvPreview(); }
+function clearCSV() { csvSearches = []; document.getElementById('csvPreview').style.display = 'none'; }
+
+async function runCustomAssessment() {
+  const apiKey = document.getElementById('v1ApiKey').value;
+  if (!apiKey) { showView('assessment'); return toast('Please enter your Vision One API key in the Assessment config', 'error'); }
+  const enabled = csvSearches.filter(s => s.enabled !== false);
+  if (!enabled.length) return toast('No searches enabled', 'error');
+
+  // Build CSV content
+  const headers = 'name,description,sorting,log_type,orientation,query';
+  const rows = enabled.map(s => `${s.name},"${(s.description||'').replace(/"/g,'""')}",${s.sorting||'default'},${s.log_type||'network'},${s.orientation||'horizontal'},"${(s.query||'').replace(/"/g,'""')}"`);
+  const csvContent = [headers, ...rows].join('\n');
+
+  // Switch to assessment view and run
+  showView('assessment');
+  document.getElementById('btnRunAssessment').disabled = true;
+  document.getElementById('assessmentProgress').style.display = 'block';
+  document.getElementById('assessmentResults').style.display = 'none';
+  document.getElementById('assessmentConsole').textContent = '';
+
+  try {
+    const resp = await fetch('/api/assessment/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey,
+        baseUrl: document.getElementById('v1Region').value,
+        timeInterval: parseInt(document.getElementById('v1TimeInterval').value),
+        csvContent,
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+    activeJobId = data.jobId;
+    activeJobType = 'assessment';
+    pollInterval = setInterval(() => pollAssessmentStatus(data.jobId), 2000);
+  } catch (e) {
+    toast('Failed: ' + e.message, 'error');
+    document.getElementById('btnRunAssessment').disabled = false;
+  }
+}
+
+function downloadTemplate(cat) {
+  window.location = '/api/csv/template/' + cat;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI SCAN
+// ═══════════════════════════════════════════════════════════════════════════════
+const providerDefaults = {
+  openai: { endpoint: 'https://api.openai.com/v1', model: 'gpt-4' },
+  anthropic: { endpoint: '(LiteLLM proxy)', model: 'claude-sonnet-4-6' },
+  ollama: { endpoint: 'http://localhost:11434/v1', model: 'llama3' },
+  azure_openai: { endpoint: '', model: 'gpt-4' },
+  custom: { endpoint: '', model: '' },
+};
+
+function updateProviderDefaults() {
+  const p = document.getElementById('aiProvider').value;
+  const d = providerDefaults[p] || {};
+  document.getElementById('aiEndpoint').value = d.endpoint || '';
+  document.getElementById('aiEndpoint').placeholder = d.endpoint || 'https://...';
+  document.getElementById('aiModel').value = d.model || '';
+}
+
+async function runAiScan() {
+  const v1Key = document.getElementById('aiV1Key').value;
+  if (!v1Key) return toast('Please enter your Vision One API key', 'error');
+
+  document.getElementById('btnRunAiScan').disabled = true;
+  document.getElementById('aiScanProgress').style.display = 'block';
+  document.getElementById('aiScanResults').style.display = 'none';
+  document.getElementById('aiScanConsole').textContent = '';
+
+  try {
+    const resp = await fetch('/api/aiscan/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider: document.getElementById('aiProvider').value,
+        endpoint: document.getElementById('aiEndpoint').value,
+        model: document.getElementById('aiModel').value,
+        llmApiKey: document.getElementById('aiLlmKey').value,
+        visionOneApiKey: v1Key,
+        region: document.getElementById('aiRegion').value,
+        preset: document.getElementById('aiPreset').value,
+        systemPrompt: document.getElementById('aiSystemPrompt').value,
+        timeout: parseInt(document.getElementById('aiTimeout').value),
+      }),
+    });
+    const data = await resp.json();
+    if (data.error) throw new Error(data.error);
+
+    activeJobId = data.jobId;
+    activeJobType = 'aiscan';
+    pollInterval = setInterval(() => pollAiScanStatus(data.jobId), 3000);
+  } catch (e) {
+    toast('Failed: ' + e.message, 'error');
+    document.getElementById('btnRunAiScan').disabled = false;
+  }
+}
+
+async function pollAiScanStatus(jobId) {
+  try {
+    const resp = await fetch('/api/aiscan/status/' + jobId);
+    const job = await resp.json();
+
+    const bar = document.getElementById('aiScanBar');
+    const text = document.getElementById('aiScanProgressText');
+    text.textContent = job.current || (job.status === 'running' ? 'Scanning...' : job.status);
+
+    if (job.status === 'running') bar.style.width = '50%';
+
+    if (job.console) {
+      const con = document.getElementById('aiScanConsole');
+      con.textContent = job.console;
+      con.scrollTop = con.scrollHeight;
+    }
+
+    if (job.status !== 'running') {
+      clearInterval(pollInterval);
+      pollInterval = null;
+      document.getElementById('btnRunAiScan').disabled = false;
+      bar.style.width = '100%';
+
+      if (job.status === 'completed') {
+        toast('AI Scan completed!', 'success');
+        loadAiScanResults(jobId);
+      } else {
+        toast('AI Scan failed', 'error');
+      }
+    }
+  } catch (e) { /* keep polling */ }
+}
+
+async function loadAiScanResults(jobId) {
+  try {
+    const resp = await fetch('/api/aiscan/results/' + jobId);
+    const data = await resp.json();
+    document.getElementById('aiScanResults').style.display = 'block';
+
+    const r = data.results || {};
+    const findings = r.findings || [];
+    const passed = findings.filter(f => f.status === 'PASS').length;
+    const failed = findings.filter(f => f.status === 'FAIL').length;
+    const total = findings.length;
+
+    // Risk level
+    let risk = 'LOW', riskClass = 'low';
+    if (failed >= 5) { risk = 'CRITICAL'; riskClass = 'critical'; }
+    else if (failed >= 3) { risk = 'HIGH'; riskClass = 'high'; }
+    else if (failed >= 1) { risk = 'MEDIUM'; riskClass = 'medium'; }
+
+    document.getElementById('aiScanRisk').innerHTML = `<span class="risk-badge ${riskClass}">${risk}</span>`;
+    document.getElementById('aiScanStats').innerHTML = `
+      <div class="stat-card primary"><div class="stat-value">${total}</div><div class="stat-label">Total Findings</div></div>
+      <div class="stat-card success"><div class="stat-value">${passed}</div><div class="stat-label">Passed</div></div>
+      <div class="stat-card danger"><div class="stat-value">${failed}</div><div class="stat-label">Failed</div></div>
+      <div class="stat-card"><div class="stat-value">${r.exit_code ?? '—'}</div><div class="stat-label">Exit Code</div></div>
+    `;
+
+    // Doughnut chart
+    if (chartInstances.aiScan) chartInstances.aiScan.destroy();
+    const ctx = document.getElementById('aiScanChart').getContext('2d');
+    chartInstances.aiScan = new Chart(ctx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Passed', 'Failed'],
+        datasets: [{ data: [passed, failed], backgroundColor: ['#10b981', '#ef4444'], borderWidth: 0 }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } },
+    });
+
+    // Findings table
+    document.getElementById('aiScanFindings').innerHTML = `<table class="data-table">
+      <thead><tr><th>Status</th><th>Finding</th><th>Score</th></tr></thead>
+      <tbody>${findings.map(f => `
+        <tr><td><span class="card-badge ${f.status === 'PASS' ? 'success' : 'danger'}">${f.status}</span></td>
+        <td>${esc(f.detail || f.name || '')}</td><td>${f.score || '—'}</td></tr>
+      `).join('')}</tbody></table>`;
+  } catch (e) { toast('Failed to load results: ' + e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GITHUB ACTIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadGitHubRuns() {
+  const repo = document.getElementById('ghRepo').value;
+  try {
+    const resp = await fetch('/api/github/runs?repo=' + encodeURIComponent(repo));
+    const runs = await resp.json();
+
+    if (!Array.isArray(runs) || runs.length === 0) {
+      document.getElementById('ghRunsTable').innerHTML = '<div class="empty-state"><div class="empty-state-text">No workflow runs found</div></div>';
+      return;
+    }
+
+    document.getElementById('ghRunsTable').innerHTML = `<div class="data-table-wrap"><table class="data-table">
+      <thead><tr><th>Workflow</th><th>Status</th><th>Branch</th><th>Event</th><th>Started</th><th>Actions</th></tr></thead>
+      <tbody>${runs.map(r => {
+        const status = r.conclusion || r.status;
+        const statusClass = status === 'success' ? 'completed' : status === 'in_progress' ? 'in_progress' : status === 'failure' ? 'failure' : 'queued';
+        return `<tr>
+          <td style="font-weight:500">${esc(r.displayTitle || r.workflowName)}</td>
+          <td><span class="run-status ${statusClass}"><span class="status-dot ${status === 'in_progress' ? 'busy' : statusClass === 'completed' ? 'ok' : 'error'}"></span>${status}</span></td>
+          <td><code>${esc(r.headBranch || '')}</code></td>
+          <td>${esc(r.event || '')}</td>
+          <td style="font-size:12px;color:var(--text3)">${new Date(r.createdAt).toLocaleString()}</td>
+          <td><button class="btn btn-sm btn-secondary" onclick="viewRunDetail(${r.databaseId})">Details</button></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+  } catch (e) { document.getElementById('ghRunsTable').innerHTML = `<div class="empty-state"><div class="empty-state-text">Failed to load: ${esc(e.message)}</div></div>`; }
+}
+
+async function viewRunDetail(runId) {
+  const repo = document.getElementById('ghRepo').value;
+  try {
+    const resp = await fetch(`/api/github/runs/${runId}?repo=${encodeURIComponent(repo)}`);
+    const run = await resp.json();
+    const detail = document.getElementById('ghRunDetail');
+    detail.style.display = 'block';
+
+    const jobsHtml = (run.jobs || []).map(j => {
+      const stepsHtml = (j.steps || []).map(s => {
+        const icon = s.conclusion === 'success' ? '&#10003;' : s.conclusion === 'failure' ? '&#10007;' : '&#9679;';
+        const color = s.conclusion === 'success' ? 'var(--success)' : s.conclusion === 'failure' ? 'var(--danger)' : 'var(--text3)';
+        return `<div style="display:flex;gap:8px;padding:4px 0;font-size:12px"><span style="color:${color}">${icon}</span><span>${esc(s.name)}</span><span style="color:var(--text3);margin-left:auto">${s.conclusion || s.status}</span></div>`;
+      }).join('');
+      return `<div class="card" style="margin-top:8px"><div class="card-header" onclick="toggleCard(this)">
+        <span class="card-title">${esc(j.name)}</span>
+        <span class="card-badge ${j.conclusion === 'success' ? 'success' : 'danger'}">${j.conclusion || j.status}</span>
+        <span class="card-toggle">&#9656;</span>
+      </div><div class="card-body">${stepsHtml}</div></div>`;
+    }).join('');
+
+    detail.innerHTML = `<h3>${esc(run.displayTitle)}</h3>${jobsHtml}
+      <button class="btn btn-sm btn-secondary" style="margin-top:8px" onclick="document.getElementById('ghRunDetail').style.display='none'">Close</button>`;
+  } catch (e) { toast('Failed to load details', 'error'); }
+}
+
+function toggleGhAutoRefresh() {
+  if (document.getElementById('ghAutoRefresh').checked) {
+    ghPollInterval = setInterval(loadGitHubRuns, 15000);
+  } else {
+    clearInterval(ghPollInterval);
+    ghPollInterval = null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DISPATCH
+// ═══════════════════════════════════════════════════════════════════════════════
+async function dispatchAiScan() {
+  try {
+    const resp = await fetch('/api/github/dispatch/ai-security-scan.yml', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: {
+        vision_one_api_key: document.getElementById('dAiV1Key').value,
+        llm_provider: document.getElementById('dAiProvider').value,
+        llm_model: document.getElementById('dAiModel').value,
+        llm_api_key: document.getElementById('dAiLlmKey').value,
+        attack_preset: document.getElementById('dAiPreset').value,
+        vision_one_region: document.getElementById('dAiRegion').value,
+      }}),
+    });
+    const data = await resp.json();
+    if (data.success) { toast('Workflow triggered!', 'success'); showView('github'); }
+    else toast(data.error || 'Failed', 'error');
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+async function dispatchAssessment() {
+  try {
+    const resp = await fetch('/api/github/dispatch/security-assessment.yml?repo=Angelmountain/security-assesment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ inputs: {
+        api_key: document.getElementById('dAssessKey').value,
+        base_url: document.getElementById('dAssessUrl').value,
+        time_interval: document.getElementById('dAssessTime').value,
+      }}),
+    });
+    const data = await resp.json();
+    if (data.success) { toast('Workflow triggered!', 'success'); showView('github'); }
+    else toast(data.error || 'Failed', 'error');
+  } catch (e) { toast('Failed: ' + e.message, 'error'); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HISTORY
+// ═══════════════════════════════════════════════════════════════════════════════
+async function loadHistory() {
+  try {
+    const resp = await fetch('/api/history');
+    const history = await resp.json();
+    const list = document.getElementById('historyList');
+    if (!history.length) {
+      list.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#128196;</div><div class="empty-state-text">No history yet</div></div>';
+      return;
+    }
+    list.innerHTML = history.reverse().map(h => `
+      <div class="card" style="margin-bottom:8px">
+        <div class="card-header">
+          <span class="card-badge ${h.type === 'assessment' ? 'info' : 'warning'}">${h.type}</span>
+          <span class="card-title">${h.type === 'assessment' ? `${h.searches || '?'} searches` : `${h.provider || '?'} / ${h.model || '?'} / ${h.preset || '?'}`}</span>
+          <span class="card-badge ${h.status === 'completed' ? 'success' : 'danger'}">${h.status}</span>
+          <span style="font-size:12px;color:var(--text3)">${new Date(h.timestamp).toLocaleString()}</span>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) { /* ignore */ }
+}
+
+async function clearHistory() {
+  await fetch('/api/history', { method: 'DELETE' });
+  loadHistory();
+  toast('History cleared', 'info');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHART HELPERS
+// ═══════════════════════════════════════════════════════════════════════════════
+function renderBarChart(canvasId, data, title) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const labels = data.map(d => d[0] || d.category || '');
+  const values = data.map(d => d[1] || d.count || 0);
+
+  const colors = generateColors(values.length);
+  new Chart(canvas.getContext('2d'), {
+    type: 'bar',
+    data: { labels, datasets: [{ label: title || 'Count', data: values, backgroundColor: colors, borderWidth: 0, borderRadius: 4 }] },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { display: false }, ticks: { color: '#e2e8f0', font: { size: 11 } } },
+      },
+    },
+  });
+}
+
+function generateColors(n) {
+  const palette = ['#3b82f6','#06b6d4','#10b981','#8b5cf6','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#6366f1'];
+  return Array.from({ length: n }, (_, i) => palette[i % palette.length]);
+}
+
+function renderDataTable(data) {
+  if (!data || !data.length) return '';
+  return `<div class="data-table-wrap"><table class="data-table">
+    <thead><tr><th>Category</th><th>Count</th></tr></thead>
+    <tbody>${data.map(d => `<tr><td>${esc(String(d[0] || d.category || ''))}</td><td>${d[1] || d.count || 0}</td></tr>`).join('')}</tbody>
+  </table></div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// UTILITIES
+// ═══════════════════════════════════════════════════════════════════════════════
+function esc(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════════
+loadPrebuiltSearches();
+
+// Health check
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    document.getElementById('statusDot').className = 'status-dot ok';
+    document.getElementById('statusText').textContent = 'Online';
+  } catch (e) {
+    document.getElementById('statusDot').className = 'status-dot error';
+    document.getElementById('statusText').textContent = 'Offline';
+  }
+}, 30000);
+</script>
+</body>
+</html>
