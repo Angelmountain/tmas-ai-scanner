@@ -140,7 +140,71 @@ class VisionOneClient:
             return "detections"
         return "network"
 
-    # ----- paginated search -----
+    # ----- single chunk search (paginated, up to API limit) -----
+    def _search_chunk(
+        self,
+        log_type: str,
+        start_time: str,
+        end_time: str,
+        query: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Search a single time chunk with pagination."""
+        url = f"{self.base_url}{self.ENDPOINTS[log_type]}"
+        headers: Dict[str, str] = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        if query:
+            headers["TMV1-Query"] = query.strip()
+
+        results: List[Dict[str, Any]] = []
+        next_link: Optional[str] = None
+
+        while True:
+            if not next_link or not next_link.startswith("http"):
+                params: Dict[str, Any] = {
+                    "startDateTime": start_time,
+                    "endDateTime": end_time,
+                    "top": PAGE_SIZE,
+                }
+                if next_link:
+                    params["nextPageToken"] = next_link
+                request_url = url
+            else:
+                params = {}
+                request_url = next_link
+
+            try:
+                resp = self.session.get(
+                    request_url, params=params, headers=headers, timeout=60
+                )
+                if resp.status_code == 429:
+                    wait = int(resp.headers.get("Retry-After", 60))
+                    logger.warning("Rate-limited. Sleeping %ds ...", wait)
+                    time.sleep(wait)
+                    continue
+            except requests.exceptions.RequestException as exc:
+                logger.error("Request failed: %s", exc)
+                break
+
+            if resp.status_code == 200:
+                body = resp.json()
+                items = body.get("items", [])
+                if items:
+                    results.extend(items)
+                next_link = body.get("nextPageToken") or body.get("nextLink")
+                if not next_link:
+                    break
+            else:
+                logger.error(
+                    "API error: %s returned %d - %s",
+                    log_type, resp.status_code, resp.text[:500],
+                )
+                break
+
+        return results
+
+    # ----- time-chunked search (bypasses 10K record limit) -----
     def search_logs(
         self,
         log_type: str,
@@ -148,7 +212,12 @@ class VisionOneClient:
         end_time: str,
         query: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Execute a paginated search and return all items."""
+        """Execute a search with time-chunking to bypass the 10K record limit.
+
+        The Vision One API returns max ~10,000 records per search. To get
+        full data across a 30-day window, we split into 24-hour chunks and
+        merge results. Each chunk can return up to 10K records.
+        """
         if log_type not in ("network", "detections", "everything"):
             logger.error("Invalid log type '%s'.", log_type)
             return []
@@ -156,71 +225,44 @@ class VisionOneClient:
         log_types = (
             ["network", "detections"] if log_type == "everything" else [log_type]
         )
+
+        # Calculate time chunks (24-hour windows)
+        start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
+        end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
+        duration_hours = (end_dt - start_dt).total_seconds() / 3600
+        chunk_hours = 24  # 24-hour chunks
+        num_chunks = max(1, int(duration_hours / chunk_hours))
+
         all_results: List[Dict[str, Any]] = []
 
         for lt in log_types:
-            url = f"{self.base_url}{self.ENDPOINTS[lt]}"
-            headers: Dict[str, str] = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            }
-            if query:
-                headers["TMV1-Query"] = query.strip()
+            logger.info(
+                "Searching %s | %d chunks of %dh | query: %s",
+                lt, num_chunks, chunk_hours, (query or "")[:80],
+            )
 
-            logger.info("Executing %s search | query: %s", lt, query)
+            chunk_start = start_dt
+            for chunk_idx in range(num_chunks):
+                chunk_end = min(chunk_start + timedelta(hours=chunk_hours), end_dt)
+                cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+                ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            next_link: Optional[str] = None
-            while True:
-                if not next_link or not next_link.startswith("http"):
-                    params: Dict[str, Any] = {
-                        "startDateTime": start_time,
-                        "endDateTime": end_time,
-                        "top": PAGE_SIZE,
-                    }
-                    if next_link:
-                        params["nextPageToken"] = next_link
-                    request_url = url
-                else:
-                    params = {}
-                    request_url = next_link
-
-                try:
-                    resp = self.session.get(
-                        request_url, params=params, headers=headers, timeout=60
+                items = self._search_chunk(lt, cs, ce, query=query)
+                if items:
+                    all_results.extend(items)
+                    logger.info(
+                        "Chunk %d/%d: %d items (total: %d)",
+                        chunk_idx + 1, num_chunks, len(items), len(all_results),
                     )
 
-                    # Explicit rate-limit handling (beyond urllib3 retry)
-                    if resp.status_code == 429:
-                        wait = int(resp.headers.get("Retry-After", 60))
-                        logger.warning("Rate-limited. Sleeping %ds ...", wait)
-                        time.sleep(wait)
-                        continue
-
-                except requests.exceptions.RequestException as exc:
-                    logger.error("Request failed: %s", exc)
+                chunk_start = chunk_end
+                if chunk_start >= end_dt:
                     break
 
-                if resp.status_code == 200:
-                    body = resp.json()
-                    items = body.get("items", [])
-                    if items:
-                        all_results.extend(items)
-                        logger.info(
-                            "Retrieved %d items from %s (total: %d)",
-                            len(items), lt, len(all_results),
-                        )
-                    next_link = body.get("nextPageToken") or body.get("nextLink")
-                    if not next_link:
-                        logger.info(
-                            "Completed %s search. Total items: %d", lt, len(all_results)
-                        )
-                        break
-                else:
-                    logger.error(
-                        "API error: %s returned %d - %s",
-                        lt, resp.status_code, resp.text[:500],
-                    )
-                    break
+                # Small delay between chunks to avoid rate limiting
+                time.sleep(0.3)
+
+            logger.info("Completed %s search. Total items: %d", lt, len(all_results))
 
         return all_results
 
