@@ -509,6 +509,24 @@ def process_single_search(
         result_info["records"] = len(results)
         result_info["file"] = filepath
 
+        # Include top chart data for frontend rendering
+        if rows_to_export and isinstance(rows_to_export[0], dict):
+            keys = list(rows_to_export[0].keys())
+            if len(keys) >= 2:
+                cat_key, val_key = keys[0], keys[1]
+                chart_data = []
+                for row in rows_to_export[:25]:  # Top 25 for charts
+                    cat = str(row.get(cat_key, ""))[:60]
+                    val = row.get(val_key, 0)
+                    try:
+                        val = int(val)
+                    except (ValueError, TypeError):
+                        val = 0
+                    if cat and val > 0:
+                        chart_data.append([cat, val])
+                result_info["data"] = chart_data
+                result_info["columns"] = [cat_key, val_key]
+
     except Exception as exc:
         msg = f"Failed to process '{search_name}': {exc}"
         logger.error(msg)
@@ -599,12 +617,42 @@ def run_assessment(
     if ppt_ok:
         generated_files.append(pptx_path)
 
+    # Build search_results for frontend charts
+    search_results = []
+    for r in all_results:
+        if not r.get("name"):
+            continue
+        entry = {
+            "name": r["name"],
+            "count": r.get("records", 0),
+            "data": r.get("data", []),
+            "columns": r.get("columns", []),
+            "error": r.get("error"),
+        }
+        search_results.append(entry)
+
+    # Save summary.json for the server to read
+    summary_data = {
+        "total": total,
+        "with_data": with_data,
+        "total_records": total_records,
+        "search_results": search_results,
+    }
+    summary_path = os.path.join(output_dir, "summary.json")
+    try:
+        import json as _json
+        with open(summary_path, "w") as sf:
+            _json.dump(summary_data, sf, indent=2)
+        logger.info("Summary saved to %s", summary_path)
+    except Exception as exc:
+        logger.warning("Could not save summary.json: %s", exc)
+
     # Final status
     status = "success" if not errors else ("partial" if with_data > 0 else "error")
     emit_complete(
         status=status,
         files=generated_files,
-        summary={"total": total, "with_data": with_data, "records": total_records},
+        summary=summary_data,
         errors=errors if errors else None,
     )
 

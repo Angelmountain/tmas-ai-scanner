@@ -556,52 +556,91 @@ async function loadResults(id){
     const r=await fetch('/api/assessment/results/'+id);const d=await r.json();
     document.getElementById('resultsSection').style.display='block';activeJob=id;
     const summary=d.summary||{};const files=d.excelFiles||[];
-    const withData=files.length;const noData=summary.total?summary.total-withData:0;
+    const searchResults=summary.search_results||[];
+    const withData=searchResults.filter(s=>s.data&&s.data.length>0).length;
+    const noData=searchResults.filter(s=>!s.data||s.data.length===0).length;
+    const totalRecords=summary.total_records||searchResults.reduce((a,s)=>a+(s.count||0),0);
 
     // Stats
     document.getElementById('resultStats').innerHTML=`
-      <div class="stat p"><div class="stat-v">${summary.total||files.length}</div><div class="stat-l">Total Searches</div></div>
+      <div class="stat p"><div class="stat-v">${summary.total||searchResults.length}</div><div class="stat-l">Total Searches</div></div>
       <div class="stat g"><div class="stat-v">${withData}</div><div class="stat-l">With Data</div></div>
       ${noData>0?`<div class="stat w"><div class="stat-v">${noData}</div><div class="stat-l">No Results</div></div>`:''}
-      <div class="stat"><div class="stat-v">${summary.total_records||'--'}</div><div class="stat-l">Total Records</div></div>
-      <div class="stat"><div class="stat-v">${d.hasPpt?'Yes':'No'}</div><div class="stat-l">PowerPoint</div></div>`;
+      <div class="stat"><div class="stat-v">${fmtNum(totalRecords)}</div><div class="stat-l">Total Records</div></div>
+      <div class="stat"><div class="stat-v">${d.hasPpt?'Ready':'No'}</div><div class="stat-l">PowerPoint</div></div>`;
 
-    // No results warning
-    if(files.length===0){
-      document.getElementById('resultCards').innerHTML=`<div class="error-box"><h4>No Results Found</h4><p>The assessment completed but no data was returned from any search. This could mean:</p><ul style="margin:8px 0 0 20px;font-size:13px;color:var(--text2)"><li>The API key may not have the correct permissions</li><li>The time interval may be too short for available data</li><li>The Vision One instance may not have NDR sensors configured</li><li>Network activity data may not be available in the selected region</li></ul><p style="margin-top:8px">Try expanding the time interval or verifying your API key permissions in the Vision One console.</p></div>`;
+    // No results
+    if(withData===0&&files.length===0){
+      document.getElementById('resultCards').innerHTML=`<div class="error-box"><h4>No Results Found</h4><p>The assessment completed but no data was returned. Possible causes:</p><ul style="margin:8px 0 0 20px;font-size:13px;color:var(--text2)"><li>API key may lack permissions for search endpoints</li><li>Time interval too short or no NDR sensor data available</li><li>Check console output for API error details</li></ul></div>`;
       return;
     }
 
-    // Result cards with charts
+    // Render result cards - use searchResults as primary, match to files
     const cards=document.getElementById('resultCards');cards.innerHTML='';
-    const searchResults=summary.search_results||[];
-    for(const file of files){
-      const name=file.name.replace(/_[^_]+_[^_]+\.xlsx$/,'').replace(/_/g,' ');
-      const rd=searchResults.find(r=>r.name===name)||{};
-      const cardId='r-'+file.name.replace(/[^a-z0-9]/gi,'');
-      const hasData=rd.data&&rd.data.length>0;
-      const count=rd.count||'?';
+    const rendered=searchResults.length>0?searchResults:files.map(f=>({name:f.name.replace(/_[^_]+_[^_]+\.xlsx$/,'').replace(/_/g,' '),count:0,data:[]}));
+
+    for(const sr of rendered){
+      const hasData=sr.data&&sr.data.length>0;
+      const count=sr.count||0;
+      const cardId='r-'+sr.name.replace(/[^a-z0-9]/gi,'');
+      // Find matching Excel file
+      const matchFile=files.find(f=>{const fn=f.name.replace(/_[^_]+_[^_]+\.xlsx$/,'').replace(/_/g,' ');return fn===sr.name;});
+      const cols=sr.columns||['Category','Count'];
 
       const card=document.createElement('div');card.className='result-card';
       card.innerHTML=`
         <div class="result-hd" onclick="toggleResult(this)">
-          <span class="badge ${hasData?'ok':'info'}">${count} results</span>
-          <span class="result-name">${esc(name)}</span>
-          <button class="btn btn-sm btn-s" onclick="event.stopPropagation();window.location='/api/assessment/excel/${id}/${encodeURIComponent(file.name)}'">Excel</button>
-          <span class="chevron">&#9656;</span>
+          <span class="badge ${count>0?'ok':sr.error?'err':'info'}">${count>0?fmtNum(count)+' records':sr.error?'Error':'0 records'}</span>
+          <span class="result-name">${esc(sr.name)}</span>
+          ${matchFile?`<button class="btn btn-sm btn-s" onclick="event.stopPropagation();window.location='/api/assessment/excel/${id}/${encodeURIComponent(matchFile.name)}'">Excel</button>`:''}
+          <span class="chevron">${hasData?'&#9656;':'&#9656;'}</span>
         </div>
-        <div class="result-bd">
-          ${hasData?`<div class="chart-box"><canvas id="c-${cardId}"></canvas></div>`:''}
-          ${hasData?renderTable(rd.data):'<div class="commentary warn">No chart data available. Download the Excel file for raw data.</div>'}
+        <div class="result-bd ${hasData?'open':''}">
+          ${sr.error?`<div class="commentary err">${esc(sr.error)}</div>`:''}
+          ${hasData?`
+            <div class="chart-box"><canvas id="c-${cardId}"></canvas></div>
+            <div class="dtbl-wrap" style="margin-top:8px"><table class="dtbl">
+              <thead><tr><th>${esc(cols[0])}</th><th style="text-align:right">${esc(cols[1])}</th><th style="text-align:right;width:120px">Bar</th></tr></thead>
+              <tbody>${sr.data.slice(0,25).map((d,i)=>{
+                const maxVal=Math.max(...sr.data.map(x=>x[1]||0));
+                const pct=maxVal>0?((d[1]||0)/maxVal*100):0;
+                const clr=chartColors[i%chartColors.length];
+                return`<tr onclick="drillDown('${esc(sr.name)}',${JSON.stringify(d).replace(/'/g,"\\'")})" style="cursor:pointer" title="Click for details">
+                  <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(String(d[0]))}</td>
+                  <td style="text-align:right;font-weight:600">${fmtNum(d[1]||0)}</td>
+                  <td><div style="background:${clr};height:14px;border-radius:3px;width:${pct}%;min-width:2px;opacity:.7"></div></td>
+                </tr>`;}).join('')}</tbody>
+            </table></div>
+          `:`<div class="commentary" style="margin-top:4px">${count===0?'No data returned for this search.':'Data available in Excel download.'}</div>`}
         </div>`;
       cards.appendChild(card);
-      if(hasData)setTimeout(()=>makeBarChart('c-'+cardId,rd.data,name),100);
+      if(hasData)setTimeout(()=>makeBarChart('c-'+cardId,sr.data,sr.name,cols),50);
     }
   }catch(e){showError('Failed to load results',e.message);}
 }
+
+// Drill-down modal
+function drillDown(searchName,item){
+  const name=item[0]||'Unknown';const count=item[1]||0;
+  const modal=document.createElement('div');
+  modal.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:flex;align-items:center;justify-content:center';
+  modal.onclick=e=>{if(e.target===modal)modal.remove();};
+  modal.innerHTML=`<div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:24px;max-width:500px;width:90%">
+    <h3 style="margin-bottom:12px">${esc(searchName)}</h3>
+    <div class="stat" style="margin-bottom:12px"><div class="stat-v" style="color:var(--primary)">${fmtNum(count)}</div><div class="stat-l">occurrences</div></div>
+    <div style="font-size:14px;margin-bottom:6px;color:var(--text)"><strong>Value:</strong></div>
+    <div style="background:var(--bg);padding:10px;border-radius:6px;font-family:monospace;font-size:13px;word-break:break-all;margin-bottom:16px">${esc(String(name))}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">This value appeared ${fmtNum(count)} times in the Vision One search results for "${esc(searchName)}".</div>
+    <button class="btn btn-s" onclick="this.closest('div[style*=fixed]').remove()">Close</button>
+    <button class="btn btn-p" style="margin-left:8px" onclick="navigator.clipboard.writeText('${esc(String(name)).replace(/'/g,"\\'")}');toast('Copied!','ok')">Copy Value</button>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
 function toggleResult(el){const bd=el.nextElementSibling,ch=el.querySelector('.chevron');bd.classList.toggle('open');if(ch)ch.classList.toggle('open');}
 function downloadJob(type){if(!activeJob)return;window.location=type==='zip'?'/api/assessment/download/'+activeJob:'/api/assessment/ppt/'+activeJob;}
 function showError(title,msg){document.getElementById('errorSection').style.display='block';document.getElementById('errorSection').innerHTML=`<div class="error-box"><h4>${esc(title)}</h4><p>${esc(msg)}</p></div>`;}
+function fmtNum(n){return typeof n==='number'?n.toLocaleString():n;}
 
 // ═══ CSV ═══
 const dz=document.getElementById('dropzone');
@@ -709,17 +748,40 @@ async function loadHist(){try{const r=await fetch('/api/history');const h=await 
 async function clearHist(){await fetch('/api/history',{method:'DELETE'});loadHist();toast('Cleared','info');}
 
 // ═══ CHART HELPERS ═══
-function makeBarChart(id,data,title){
-  const el=document.getElementById(id);if(!el)return;
-  const labels=data.map(d=>d[0]||d.category||'');const vals=data.map(d=>d[1]||d.count||0);
-  const colors=['#3b82f6','#06b6d4','#10b981','#8b5cf6','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#6366f1'];
-  new Chart(el.getContext('2d'),{type:'bar',data:{labels,datasets:[{label:title||'Count',data:vals,backgroundColor:labels.map((_,i)=>colors[i%colors.length]),borderWidth:0,borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#1e293b'},ticks:{color:'#94a3b8'}},y:{grid:{display:false},ticks:{color:'#e2e8f0',font:{size:11}}}}}});
+const chartColors=['#3b82f6','#06b6d4','#10b981','#8b5cf6','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#6366f1','#a855f7','#22d3ee','#84cc16','#fb923c','#f43f5e'];
+
+function makeBarChart(id,data,title,cols){
+  const el=document.getElementById(id);if(!el||!data||!data.length)return;
+  // Truncate labels for display
+  const labels=data.slice(0,20).map(d=>{const s=String(d[0]||'');return s.length>35?s.substring(0,32)+'...':s;});
+  const vals=data.slice(0,20).map(d=>d[1]||0);
+  const bgColors=labels.map((_,i)=>chartColors[i%chartColors.length]);
+
+  const chart=new Chart(el.getContext('2d'),{
+    type:'bar',
+    data:{labels,datasets:[{label:(cols&&cols[1])||'Count',data:vals,backgroundColor:bgColors,borderWidth:0,borderRadius:4,barPercentage:.75}]},
+    options:{
+      indexAxis:'y',responsive:true,maintainAspectRatio:false,
+      onClick:(e,elements)=>{
+        if(elements.length>0){const idx=elements[0].index;drillDown(title,data[idx]);}
+      },
+      plugins:{
+        legend:{display:false},
+        tooltip:{callbacks:{
+          title:ctx=>String(data[ctx[0].dataIndex][0]||''),
+          label:ctx=>`${(cols&&cols[1])||'Count'}: ${ctx.raw.toLocaleString()}`
+        }}
+      },
+      scales:{
+        x:{grid:{color:'#1e293b'},ticks:{color:'#94a3b8',callback:v=>v>=1000?(v/1000).toFixed(0)+'k':v}},
+        y:{grid:{display:false},ticks:{color:'#e2e8f0',font:{size:11},crossAlign:'far'}}
+      }
+    }
+  });
+  // Store for cleanup
+  if(!charts.assessment)charts.assessment=[];
+  charts.assessment.push(chart);
 }
-function renderTable(data){
-  if(!data||!data.length)return'';
-  return`<div class="dtbl-wrap" style="margin-top:8px"><table class="dtbl"><thead><tr><th>Category</th><th>Count</th></tr></thead><tbody>${data.slice(0,20).map(d=>`<tr><td>${esc(String(d[0]||d.category||''))}</td><td>${d[1]||d.count||0}</td></tr>`).join('')}</tbody></table></div>`;
-}
-function colors(n){const p=['#3b82f6','#06b6d4','#10b981','#8b5cf6','#f59e0b','#ef4444','#ec4899','#14b8a6','#f97316','#6366f1'];return Array.from({length:n},(_,i)=>p[i%p.length]);}
 
 // ═══ INIT ═══
 loadSearches();
