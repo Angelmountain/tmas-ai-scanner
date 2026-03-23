@@ -147,7 +147,6 @@ class VisionOneClient:
         start_time: str,
         end_time: str,
         query: Optional[str] = None,
-        select_fields: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Execute a paginated search and return all items."""
         if log_type not in ("network", "detections", "everything"):
@@ -178,9 +177,6 @@ class VisionOneClient:
                         "endDateTime": end_time,
                         "top": PAGE_SIZE,
                     }
-                    # Only fetch the fields we need for aggregation
-                    if select_fields:
-                        params["select"] = select_fields
                     if next_link:
                         params["nextPageToken"] = next_link
                     request_url = url
@@ -310,10 +306,15 @@ def _aggregate_by_field(
     label_col: str,
     count_col: str,
 ) -> List[Dict[str, Any]]:
-    """Count occurrences of *item_key* across results, return sorted desc."""
+    """Count occurrences of *item_key* across results, return sorted desc.
+
+    Skips records where the field is missing, None, or empty string.
+    """
     counts: Dict[Any, int] = {}
     for item in results:
-        val = item.get(item_key, f"Unknown {item_key}")
+        val = item.get(item_key)
+        if not val:  # Skip None, empty string, 0
+            continue
         counts[val] = counts.get(val, 0) + 1
     return [
         {label_col: k, count_col: v}
@@ -491,18 +492,11 @@ def process_single_search(
     )
 
     try:
-        # Build select fields - only fetch the field we need for aggregation
-        sf_lower = sorting_field.strip().lower()
-        api_field = _FIELD_NAME_MAP.get(sf_lower, sorting_field.strip())
-        # Always include the aggregation field; for network also include productCode
-        if log_type == "network" and api_field:
-            select_fields = f"{api_field},productCode"
-        else:
-            select_fields = None  # detections API doesn't support select
-
+        # Don't use select parameter - many fields (suid, hostName, etc.)
+        # only appear on certain record types. Filtering with select causes
+        # data loss for searches that need sparse fields across many records.
         results = client.search_logs(
             log_type, start_time, end_time, query=query,
-            select_fields=select_fields,
         )
 
         if results:
