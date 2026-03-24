@@ -96,9 +96,13 @@ function restoreJobsFromDisk() {
     for (const d of dirs) {
       if (jobs.has(d)) continue;
       try {
-        const state = JSON.parse(fs.readFileSync(path.join(JOBS_DIR, d, 'state.json'), 'utf-8'));
-        // Mark orphaned running jobs as failed (server restarted mid-run)
-        if (state.status === 'running') state.status = 'interrupted';
+        const statePath = path.join(JOBS_DIR, d, 'state.json');
+        const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
+        // Mark orphaned running jobs as interrupted (server restarted mid-run)
+        if (state.status === 'running') {
+          state.status = 'interrupted';
+          try { fs.writeFileSync(statePath, JSON.stringify(state, null, 2)); } catch (e) { /* ignore */ }
+        }
         jobs.set(d, { ...state, console: [] });
       } catch (e) { /* skip corrupt */ }
     }
