@@ -26,7 +26,7 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -198,6 +198,11 @@ class VisionOneClient:
                 next_link = body.get("nextPageToken") or body.get("nextLink")
                 if not next_link:
                     break
+            elif resp.status_code == 400 and select:
+                # select parameter not supported for this query - retry without it
+                logger.warning("select=%s returned 400, retrying without select", select)
+                select = None
+                continue
             else:
                 logger.error(
                     "API error: %s returned %d - %s",
@@ -771,7 +776,7 @@ def run_assessment(
     client = VisionOneClient(api_key, base_url)
 
     # Time range
-    end_dt = datetime.utcnow()
+    end_dt = datetime.now(tz=timezone.utc).replace(tzinfo=None)
     start_dt = end_dt - timedelta(hours=time_interval)
     start_time = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     end_time = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
