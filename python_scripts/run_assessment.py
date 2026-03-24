@@ -50,7 +50,6 @@ logger = logging.getLogger("run_assessment")
 # Constants
 # ---------------------------------------------------------------------------
 PAGE_SIZE = 5000  # Maximum records per API page
-MAX_RECORDS_PER_SEARCH = 200000  # Cap to prevent OOM (200K per search)
 MAX_WORKERS = 1   # Sequential execution (prevents OOM from parallel fetches)
 
 # Thread-safe lock for writing JSON lines to stdout
@@ -213,57 +212,54 @@ class VisionOneClient:
 
         return results
 
-    # ----- main search entry point -----
-    def search_logs(
+    # ----- streaming aggregation search (no memory limit) -----
+    def search_and_aggregate(
         self,
         log_type: str,
         start_time: str,
         end_time: str,
         query: Optional[str] = None,
         sorting_field: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
-        """Execute a search with fixed time-chunking.
+    ) -> Tuple[Dict[str, int], int]:
+        """Fetch ALL data and aggregate on-the-fly.
 
-        Splits the time range into 6-hour windows. Each chunk fetches up to
-        10K records (API limit). For a 30-day window that's ~120 chunks,
-        yielding up to 1.2M records total.
+        Instead of storing millions of raw records in memory, this counts
+        by the aggregation field as records stream in. Memory usage is
+        O(unique_values) instead of O(total_records).
 
-        Uses ``select`` (network only) to fetch only the aggregation field,
-        keeping records small so more fit per API page.
-
-        No recursive splitting - simple and predictable.
+        Returns (counts_dict, total_records_seen).
         """
         if log_type not in ("network", "detections", "everything"):
             logger.error("Invalid log type '%s'.", log_type)
-            return []
+            return {}, 0
 
         log_types = (
             ["network", "detections"] if log_type == "everything" else [log_type]
         )
 
+        # Resolve the API field name for aggregation
+        sf_lower = (sorting_field or "").strip().lower()
+        api_field = _FIELD_NAME_MAP.get(sf_lower, (sorting_field or "").strip())
+
         # Build select parameter for network searches
-        select = None
-        if sorting_field and log_type == "network":
-            sf_lower = sorting_field.strip().lower()
-            api_field = _FIELD_NAME_MAP.get(sf_lower, sorting_field.strip())
-            if api_field:
-                select = api_field
+        select = api_field if (api_field and log_type == "network") else None
 
         start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
 
-        # Fixed 6-hour chunks - simple, fast, predictable
+        # Fixed 6-hour chunks
         chunk_hours = 6
         num_chunks = max(1, int(duration_hours / chunk_hours) + 1)
 
-        all_results: List[Dict[str, Any]] = []
+        counts: Dict[str, int] = {}
+        total_records = 0
 
         for lt in log_types:
             sel = select if lt == "network" else None
             logger.info(
-                "Searching %s | %d chunks of %dh | select=%s | query: %s",
-                lt, num_chunks, chunk_hours, sel, (query or "")[:80],
+                "Searching %s | %d chunks of %dh | select=%s | agg=%s | query: %s",
+                lt, num_chunks, chunk_hours, sel, api_field, (query or "")[:80],
             )
 
             chunk_start = start_dt
@@ -276,27 +272,30 @@ class VisionOneClient:
                 ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
                 items = self._search_chunk(lt, cs, ce, query=query, select=sel)
-                if items:
-                    all_results.extend(items)
+                chunk_count = len(items)
+                total_records += chunk_count
+
+                # Aggregate on the fly - count by field, discard raw data
+                if api_field and items:
+                    for item in items:
+                        val = item.get(api_field)
+                        if val:
+                            counts[val] = counts.get(val, 0) + 1
+                elif items:
+                    # No aggregation field - count everything as one bucket
+                    counts["(all)"] = counts.get("(all)", 0) + chunk_count
+
+                # items go out of scope here - memory freed
 
                 chunk_start = chunk_end
-
-                # Cap total records to prevent OOM
-                if len(all_results) >= MAX_RECORDS_PER_SEARCH:
-                    logger.warning(
-                        "Hit %d record cap for %s after %d chunks",
-                        MAX_RECORDS_PER_SEARCH, lt, chunk_idx + 1,
-                    )
-                    break
-
                 time.sleep(0.1)
 
             logger.info(
-                "Completed %s search. %d records from %d chunks.",
-                lt, len(all_results), min(chunk_idx + 1, num_chunks),
+                "Completed %s search. %d records, %d unique values from %d chunks.",
+                lt, total_records, len(counts), min(chunk_idx + 1, num_chunks),
             )
 
-        return all_results
+        return counts, total_records
 
 
 # ---------------------------------------------------------------------------
@@ -566,15 +565,33 @@ def process_single_search(
     )
 
     try:
-        results = client.search_logs(
+        # Stream and aggregate - counts by field, O(unique) memory
+        counts, record_count = client.search_and_aggregate(
             log_type, start_time, end_time, query=query,
             sorting_field=sorting_field,
         )
 
-        record_count = len(results) if results else 0
-        if results:
-            rows_to_export = aggregate_results(search_name, sorting_field, results)
-            del results  # Free memory immediately after aggregation
+        # Look up column labels from aggregation rules
+        sf_lower = sorting_field.strip().lower()
+        api_field = _FIELD_NAME_MAP.get(sf_lower, sorting_field.strip())
+        key = (search_name.strip().lower(), sf_lower)
+        rule = _AGGREGATION_RULES.get(key)
+        if rule:
+            label_col, count_col = rule[0], rule[1]
+        else:
+            label_col = api_field or sorting_field
+            count_col = "Count"
+
+        # Build export rows from counts (sorted desc)
+        if counts:
+            rows_to_export = [
+                {label_col: k, count_col: v}
+                for k, v in sorted(counts.items(), key=lambda x: x[1], reverse=True)
+            ]
+            logger.info(
+                "Aggregated %d records into %d unique '%s' values",
+                record_count, len(rows_to_export), api_field,
+            )
         else:
             logger.warning("No data returned for '%s'.", search_name)
             rows_to_export = _empty_placeholder(search_name, sorting_field)
@@ -592,22 +609,18 @@ def process_single_search(
         result_info["file"] = filepath
 
         # Include top chart data for frontend rendering
-        if rows_to_export and isinstance(rows_to_export[0], dict):
-            keys = list(rows_to_export[0].keys())
-            if len(keys) >= 2:
-                cat_key, val_key = keys[0], keys[1]
-                chart_data = []
-                for row in rows_to_export[:25]:  # Top 25 for charts
-                    cat = str(row.get(cat_key, ""))[:60]
-                    val = row.get(val_key, 0)
-                    try:
-                        val = int(val)
-                    except (ValueError, TypeError):
-                        val = 0
-                    if cat and val > 0:
-                        chart_data.append([cat, val])
-                result_info["data"] = chart_data
-                result_info["columns"] = [cat_key, val_key]
+        chart_data = []
+        for row in rows_to_export[:25]:
+            cat = str(row.get(label_col, ""))[:60]
+            val = row.get(count_col, 0)
+            try:
+                val = int(val)
+            except (ValueError, TypeError):
+                val = 0
+            if cat and val > 0:
+                chart_data.append([cat, val])
+        result_info["data"] = chart_data
+        result_info["columns"] = [label_col, count_col]
 
     except Exception as exc:
         msg = f"Failed to process '{search_name}': {exc}"
