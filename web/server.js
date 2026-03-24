@@ -338,6 +338,62 @@ Sanctioned_States,Connections to sanctioned countries,hostName,network,horizonta
   res.send(csv);
 });
 
+// ─── Search Management ──────────────────────────────────────────────────────
+app.get('/api/searches/config', (req, res) => {
+  try {
+    const configPath = path.join(TEMPLATES_DIR, 'config.json');
+    const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf-8')) : {};
+    res.json(config);
+  } catch (e) { res.json({ base_query: '(productCode:pdi OR productCode:xns)' }); }
+});
+
+app.post('/api/searches/config', (req, res) => {
+  try {
+    const configPath = path.join(TEMPLATES_DIR, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify(req.body, null, 2));
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/searches/domains/:file', (req, res) => {
+  const filePath = path.join(TEMPLATES_DIR, 'domains', path.basename(req.params.file));
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
+  res.type('text/plain').send(fs.readFileSync(filePath, 'utf-8'));
+});
+
+app.put('/api/searches/domains/:file', (req, res) => {
+  const filePath = path.join(TEMPLATES_DIR, 'domains', path.basename(req.params.file));
+  try {
+    fs.writeFileSync(filePath, req.body.content || '');
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/searches/raw', (req, res) => {
+  const csvPath = path.join(TEMPLATES_DIR, 'searches.csv');
+  if (!fs.existsSync(csvPath)) return res.status(404).json({ error: 'searches.csv not found' });
+  res.type('text/plain').send(fs.readFileSync(csvPath, 'utf-8'));
+});
+
+app.put('/api/searches/raw', (req, res) => {
+  const csvPath = path.join(TEMPLATES_DIR, 'searches.csv');
+  try {
+    fs.writeFileSync(csvPath, req.body.content || '');
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/searches/domains', (req, res) => {
+  const domainsDir = path.join(TEMPLATES_DIR, 'domains');
+  if (!fs.existsSync(domainsDir)) return res.json([]);
+  const files = fs.readdirSync(domainsDir).filter(f => f.endsWith('.txt')).map(f => {
+    const content = fs.readFileSync(path.join(domainsDir, f), 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim() && !l.trim().startsWith('#'));
+    return { name: f, count: lines.length };
+  });
+  res.json(files);
+});
+
 // ─── Assessment: Run ────────────────────────────────────────────────────────
 app.post('/api/assessment/run', async (req, res) => {
   const { apiKey, baseUrl, timeInterval, searches, csvContent } = req.body;

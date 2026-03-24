@@ -218,6 +218,7 @@ textarea{resize:vertical;min-height:60px}
   <div class="sb-section">Assessment</div>
   <div class="sb-item active" onclick="showView('assessment')" data-view="assessment"><span class="sb-icon bl">&#9783;</span>Pre-built Searches</div>
   <div class="sb-item" onclick="showView('csv')" data-view="csv"><span class="sb-icon gn">&#8686;</span>Custom CSV Upload</div>
+  <div class="sb-item" onclick="showView('manage')" data-view="manage"><span class="sb-icon am">&#9998;</span>Manage Searches</div>
   <div class="sb-section">AI Security</div>
   <div class="sb-item" onclick="showView('aiscan')" data-view="aiscan"><span class="sb-icon pu">&#9889;</span>AI Scan (TMAS)</div>
   <div class="sb-section">GitHub Actions</div>
@@ -334,6 +335,88 @@ textarea{resize:vertical;min-height:60px}
   </div>
 </div>
 
+<!-- ═══ MANAGE SEARCHES ═══ -->
+<div class="view" id="view-manage">
+  <h2 style="margin-bottom:14px">Manage Searches</h2>
+
+  <!-- Config -->
+  <div class="card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="card-title">Global Configuration</span>
+      <span class="badge info">config.json</span>
+      <span class="chevron open">&#9656;</span>
+    </div>
+    <div class="card-bd open">
+      <div class="doc" style="margin-bottom:10px">
+        <p>The <strong>base query</strong> is prepended to all searches. It filters which sensor data to search. <code>(productCode:pdi OR productCode:xns)</code> = NDR sensors only.</p>
+      </div>
+      <div class="fg"><label class="fl">Base Query (prepended to all searches)</label>
+        <input type="text" id="mBaseQuery" style="font-family:monospace" placeholder="(productCode:pdi OR productCode:xns)">
+      </div>
+      <button class="btn btn-p btn-sm" onclick="saveConfig()">Save Config</button>
+    </div>
+  </div>
+
+  <!-- Searches Table -->
+  <div class="card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="card-title">Search Definitions</span>
+      <span class="badge info">searches.csv</span>
+      <span id="mSearchCount" class="badge ok">0</span>
+      <span class="chevron open">&#9656;</span>
+    </div>
+    <div class="card-bd open">
+      <div class="doc" style="margin-bottom:10px">
+        <h3>How searches work</h3>
+        <table>
+          <tr><th>Column</th><th>Description</th></tr>
+          <tr><td><code>category</code></td><td>Group name (Network, SSH, PUA, RDP, Geo, Vendor, Threats)</td></tr>
+          <tr><td><code>name</code></td><td>Display name (must be unique)</td></tr>
+          <tr><td><code>sorting</code></td><td>API field to count by: <code>suid</code>, <code>hostName</code>, <code>app</code>, <code>ruleName</code>, <code>serverPort</code>, <code>clientIp</code>, <code>serverIp</code>, <code>requestMethod</code>, <code>respCode</code>, <code>sslCertCommonName</code>, <code>fileName</code>, <code>fileType</code>, <code>respAppVersion</code>, <code>request</code></td></tr>
+          <tr><td><code>log_type</code></td><td><code>network</code> = /v3.0/search/networkActivities<br><code>detections</code> = /v3.0/search/detections<br><code>everything</code> = both endpoints</td></tr>
+          <tr><td><code>ppt_slide</code></td><td>Slide number in PowerPoint template (empty = Excel only)</td></tr>
+          <tr><td><code>enabled</code></td><td><code>true</code> or <code>false</code></td></tr>
+          <tr><td><code>query_type</code></td><td><code>base</code> = just base query, no filter<br><code>filter</code> = base query AND query_value<br><code>domains</code> = base query AND hostName:(*domain1 OR *domain2...) from file<br><code>tlds</code> = base query AND hostName:(*.tld1 OR *.tld2...) from space-separated list<br><code>raw</code> = query_value used as-is (no base query)</td></tr>
+          <tr><td><code>query_value</code></td><td>Depends on query_type: filter expression, domain filename, TLD list, or raw query</td></tr>
+        </table>
+      </div>
+      <div class="dtbl-wrap" id="mSearchTable" style="max-height:500px"></div>
+      <div class="btn-group">
+        <button class="btn btn-p btn-sm" onclick="addSearch()">Add Search</button>
+        <button class="btn btn-s btn-sm" onclick="editRawCSV()">Edit Raw CSV</button>
+        <button class="btn btn-s btn-sm" onclick="window.location='/api/searches/raw'">Download CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Domain Files -->
+  <div class="card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="card-title">Domain Lists</span>
+      <span class="badge info">templates/domains/</span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <div class="doc" style="margin-bottom:10px">
+        <p>Domain list files are used by <code>query_type=domains</code> searches. One domain per line. Lines starting with <code>#</code> are comments.</p>
+      </div>
+      <div id="mDomainList"></div>
+    </div>
+  </div>
+
+  <!-- Raw CSV Editor Modal -->
+  <div id="mRawEditor" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;display:none;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;width:90%;max-width:900px;max-height:90vh;overflow:auto">
+      <h3 id="mEditorTitle" style="margin-bottom:10px">Edit</h3>
+      <textarea id="mEditorContent" style="width:100%;height:400px;font-family:monospace;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:10px"></textarea>
+      <div class="btn-group">
+        <button class="btn btn-p" onclick="saveEditor()">Save</button>
+        <button class="btn btn-s" onclick="closeEditor()">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ AI SCAN ═══ -->
 <div class="view" id="view-aiscan">
   <h2 style="margin-bottom:14px">AI Security Scan (TMAS)</h2>
@@ -432,7 +515,7 @@ textarea{resize:vertical;min-height:60px}
 let searches=[],csvSearches=[],activeJob=null,pollTimer=null,ghTimer=null,charts={};
 
 // ═══ NAV ═══
-function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();if(n==='sessions')loadSessions();}
+function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();if(n==='sessions')loadSessions();if(n==='manage')loadManage();}
 function toggleCard(h){const b=h.nextElementSibling,c=h.querySelector('.chevron');b.classList.toggle('open');if(c)c.classList.toggle('open');}
 function showTab(e,id){const p=e.target.closest('.view')||e.target.parentElement.parentElement;p.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));p.querySelectorAll('.tab-pane').forEach(t=>t.classList.remove('active'));e.target.classList.add('active');document.getElementById(id).classList.add('active');}
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),4000);}
@@ -795,6 +878,93 @@ async function dispatchAi(){
 async function dispatchAss(){
   try{const r=await fetch('/api/github/dispatch/security-assessment.yml?repo=Angelmountain/security-assesment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inputs:{api_key:document.getElementById('dAssKey').value,base_url:document.getElementById('dAssUrl').value,time_interval:document.getElementById('dAssTime').value}})});const d=await r.json();if(d.success){toast('Workflow triggered!','ok');showView('github');}else toast(d.error||'Failed','err');}catch(e){toast(e.message,'err');}
 }
+
+// ═══ MANAGE SEARCHES ═══
+let mEditorSaveTarget=null;
+async function loadManage(){
+  // Load config
+  try{const r=await fetch('/api/searches/config');const c=await r.json();document.getElementById('mBaseQuery').value=c.base_query||'(productCode:pdi OR productCode:xns)';}catch(e){}
+  // Load searches
+  try{
+    const r=await fetch('/api/searches/prebuilt');const d=await r.json();
+    const s=d.searches||[];
+    document.getElementById('mSearchCount').textContent=s.length+' searches';
+    const catColors={Network:'info',SSH:'cy',PUA:'pu',RDP:'warn',Geo:'err',Vendor:'ok',Threats:'err'};
+    document.getElementById('mSearchTable').innerHTML=`<table class="dtbl">
+      <thead><tr><th>Cat</th><th>Name</th><th>Sort By</th><th>Type</th><th>Query Type</th><th>Query Value</th><th>Log</th><th>PPT</th><th>On</th><th></th></tr></thead>
+      <tbody>${s.map((x,i)=>`<tr>
+        <td><span class="badge ${catColors[x.category]||'info'}">${esc(x.category||'')}</span></td>
+        <td style="font-weight:500">${esc(x.name)}</td>
+        <td><code>${esc(x.sorting||'')}</code></td>
+        <td>${esc(x.log_type||'')}</td>
+        <td><code>${esc(x.query_type||'')}</code></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.query_value||'')}">${esc(x.query_value||'(base only)')}</td>
+        <td>${esc(x.log_type||'')}</td>
+        <td>${x.ppt_slide||'—'}</td>
+        <td>${x.enabled!=='false'?'<span style="color:var(--success)">&#10003;</span>':'<span style="color:var(--text3)">&#10007;</span>'}</td>
+        <td><button class="btn btn-sm btn-s" onclick="editSearchRow(${i})">Edit</button></td>
+      </tr>`).join('')}</tbody></table>`;
+  }catch(e){document.getElementById('mSearchTable').innerHTML=`<div class="error-box"><h4>Failed</h4><p>${esc(e.message)}</p></div>`;}
+  // Load domain files
+  try{
+    const r=await fetch('/api/searches/domains');const files=await r.json();
+    document.getElementById('mDomainList').innerHTML=files.map(f=>`
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+        <code style="flex:1">${esc(f.name)}</code>
+        <span class="badge ok">${f.count} domains</span>
+        <button class="btn btn-sm btn-s" onclick="editDomainFile('${esc(f.name)}')">Edit</button>
+      </div>`).join('');
+  }catch(e){}
+}
+
+async function saveConfig(){
+  const base=document.getElementById('mBaseQuery').value.trim();
+  if(!base){toast('Base query cannot be empty','err');return;}
+  try{
+    await fetch('/api/searches/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({base_query:base,default_orientation:'horizontal',default_log_type:'network'})});
+    toast('Config saved','ok');
+  }catch(e){toast('Failed: '+e.message,'err');}
+}
+
+async function editRawCSV(){
+  try{const r=await fetch('/api/searches/raw');const t=await r.text();
+    mEditorSaveTarget={type:'csv'};
+    document.getElementById('mEditorTitle').textContent='Edit searches.csv';
+    document.getElementById('mEditorContent').value=t;
+    document.getElementById('mRawEditor').style.display='flex';
+  }catch(e){toast('Failed','err');}
+}
+
+async function editDomainFile(name){
+  try{const r=await fetch('/api/searches/domains/'+encodeURIComponent(name));const t=await r.text();
+    mEditorSaveTarget={type:'domain',name:name};
+    document.getElementById('mEditorTitle').textContent='Edit '+name;
+    document.getElementById('mEditorContent').value=t;
+    document.getElementById('mRawEditor').style.display='flex';
+  }catch(e){toast('Failed','err');}
+}
+
+async function saveEditor(){
+  const content=document.getElementById('mEditorContent').value;
+  try{
+    if(mEditorSaveTarget.type==='csv'){
+      await fetch('/api/searches/raw',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})});
+    }else if(mEditorSaveTarget.type==='domain'){
+      await fetch('/api/searches/domains/'+encodeURIComponent(mEditorSaveTarget.name),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})});
+    }
+    toast('Saved!','ok');closeEditor();loadManage();loadSearches();
+  }catch(e){toast('Save failed: '+e.message,'err');}
+}
+
+function closeEditor(){document.getElementById('mRawEditor').style.display='none';}
+
+function addSearch(){
+  // Open raw CSV editor with cursor at bottom
+  editRawCSV();
+  setTimeout(()=>{const ta=document.getElementById('mEditorContent');ta.scrollTop=ta.scrollHeight;ta.setSelectionRange(ta.value.length,ta.value.length);ta.focus();},300);
+}
+
+function editSearchRow(idx){editRawCSV();}
 
 // ═══ SESSIONS ═══
 async function loadSessions(){
