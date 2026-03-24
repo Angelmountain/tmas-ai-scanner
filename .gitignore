@@ -12,6 +12,8 @@ config.yaml
 web/node_modules/
 web/certs/
 data/
+
+# Excel/PPT output (but keep templates)
 *.xlsx
 *.pptx
 !templates/*.pptx
@@ -21,6 +23,11 @@ terraform/.terraform/
 terraform/.terraform.lock.hcl
 terraform/terraform.tfstate*
 terraform/*.tfplan
+terraform/tfplan
 
 # TMAS binary
 tmas
+
+# Claude Code local config (not project code)
+.claude/skills/
+.claude/settings.local.json

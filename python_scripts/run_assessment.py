@@ -50,8 +50,8 @@ logger = logging.getLogger("run_assessment")
 # Constants
 # ---------------------------------------------------------------------------
 PAGE_SIZE = 5000  # Maximum records per API page
-MAX_RECORDS_PER_SEARCH = 500000  # Cap to prevent OOM (500K per search)
-MAX_WORKERS = 3   # Concurrent search threads
+MAX_RECORDS_PER_SEARCH = 200000  # Cap to prevent OOM (200K per search)
+MAX_WORKERS = 1   # Sequential execution (prevents OOM from parallel fetches)
 
 # Thread-safe lock for writing JSON lines to stdout
 _stdout_lock = threading.Lock()
@@ -617,8 +617,10 @@ def process_single_search(
             sorting_field=sorting_field,
         )
 
+        record_count = len(results) if results else 0
         if results:
             rows_to_export = aggregate_results(search_name, sorting_field, results)
+            del results  # Free memory immediately after aggregation
         else:
             logger.warning("No data returned for '%s'.", search_name)
             rows_to_export = _empty_placeholder(search_name, sorting_field)
@@ -632,7 +634,7 @@ def process_single_search(
 
         export_to_excel(rows_to_export, filepath)
 
-        result_info["records"] = len(results)
+        result_info["records"] = record_count
         result_info["file"] = filepath
 
         # Include top chart data for frontend rendering
