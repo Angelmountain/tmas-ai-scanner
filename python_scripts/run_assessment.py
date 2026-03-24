@@ -50,6 +50,7 @@ logger = logging.getLogger("run_assessment")
 # Constants
 # ---------------------------------------------------------------------------
 PAGE_SIZE = 5000  # Maximum records per API page
+MAX_RECORDS_PER_SEARCH = 500000  # Cap to prevent OOM (500K per search)
 MAX_WORKERS = 3   # Concurrent search threads
 
 # Thread-safe lock for writing JSON lines to stdout
@@ -328,6 +329,15 @@ class VisionOneClient:
                     )
 
                 chunk_start = chunk_end
+
+                # Cap total records to prevent OOM
+                if len(all_results) >= MAX_RECORDS_PER_SEARCH:
+                    logger.warning(
+                        "Hit %d record cap for %s, stopping early",
+                        MAX_RECORDS_PER_SEARCH, lt,
+                    )
+                    break
+
                 time.sleep(0.1)
 
             logger.info("Completed %s search. Total items: %d", lt, len(all_results))

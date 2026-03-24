@@ -54,6 +54,16 @@ chmod +x "$APP_DIR/tmas"
 rm /tmp/tmas.tar.gz
 echo "TMAS version: $($APP_DIR/tmas --version 2>/dev/null || echo 'installed')"
 
+# ─── Add swap space (prevents OOM on t3.medium with 4GB RAM) ─────────────────
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  echo "Swap enabled: 2G"
+fi
+
 # ─── Create data directories ─────────────────────────────────────────────────
 mkdir -p "$APP_DIR/data/jobs"
 
@@ -73,6 +83,8 @@ RestartSec=5
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=PATH=/opt/secassess/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_OPTIONS=--max-old-space-size=512
+MemoryMax=3G
 
 [Install]
 WantedBy=multi-user.target
