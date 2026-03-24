@@ -1,17 +1,18 @@
 category,name,description,sorting,log_type,ppt_slide,enabled,query_type,query_value
 # ──────────────────────────────────────────────────────────────────────────────
 # CORE NETWORK ANALYSIS
+# These use base query only - aggregation field is sparse across all records
 # ──────────────────────────────────────────────────────────────────────────────
 Network,Network Detections,All detections from both sensors,ruleName,detections,6,true,base,
-Network,Top Accounts,User accounts in network data,suid,network,7,true,filter,suid:*
-Network,Server Ports,Most used server ports,serverPort,network,8,true,filter,serverPort:*
+Network,Top Accounts,User accounts in network data,suid,network,7,true,base,
+Network,Server Ports,Most used server ports,serverPort,network,8,true,base,
 Network,Unsuccessful Logon,Failed login attempts,ruleName,detections,9,true,filter,ruleName:("*unsuccessful*logon*" OR "*failed*logon*" OR "*logon*fail*")
-Network,Top Files,Most frequently accessed files,fileName,network,,true,filter,fileName:*
-Network,File Types,Most common file types,fileType,network,,true,filter,fileType:*
-Network,Protocols,Network protocol usage,app,network,12,true,filter,app:*
-Network,Request Methods,HTTP request methods,requestMethod,network,13,true,filter,requestMethod:*
-Network,Response Codes,HTTP response code distribution,respCode,network,14,true,filter,respCode:*
-Network,SSL Certificates,SSL certificate common names,sslCertCommonName,network,15,true,filter,sslCertCommonName:*
+Network,Top Files,Most frequently accessed files,fileName,network,,true,base,
+Network,File Types,Most common file types,fileType,network,,true,base,
+Network,Protocols,Network protocol usage,app,network,12,true,base,
+Network,Request Methods,HTTP request methods,requestMethod,network,13,true,base,
+Network,Response Codes,HTTP response code distribution,respCode,network,14,true,base,
+Network,SSL Certificates,SSL certificate common names,sslCertCommonName,network,15,true,base,
 # ──────────────────────────────────────────────────────────────────────────────
 # SSH MONITORING
 # ──────────────────────────────────────────────────────────────────────────────
