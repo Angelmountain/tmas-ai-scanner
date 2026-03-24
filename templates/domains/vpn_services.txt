@@ -1,0 +1,60 @@
+# VPN and Proxy Services
+# One domain per line. Lines starting with # are comments.
+
+# Major VPNs
+nordvpn.com
+expressvpn.com
+surfshark.com
+protonvpn.com
+cyberghostvpn.com
+privateinternetaccess.com
+ipvanish.com
+purevpn.com
+mullvad.net
+
+# Free / Freemium
+windscribe.com
+tunnelbear.com
+hotspotshield.com
+hola.org
+atlasvpn.com
+betternet.co
+browsec.com
+urban-vpn.com
+speedify.com
+frootvpn.com
+zoogvpn.com
+
+# Other
+hide.me
+vpnunlimited.com
+strongvpn.com
+privadovpn.com
+vyprvpn.com
+zenmate.com
+unlocator.com
+vpnbook.com
+hidemy.name
+torguard.net
+hidemyass.com
+ultravpn.com
+securevpn.com
+vpn.ac
+vpnsecure.me
+seed4.me
+wevpn.com
+privatetunnel.com
+vpnarea.com
+airvpn.org
+operavpn.com
+whoer.net
+
+# Tor / Proxy
+torproject.org
+snowflake.torproject.net
+psiphon3.com
+psiphon.ca
+
+# DNS-based
+cloudflarewarp.com
+nextdns.io

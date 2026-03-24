@@ -1,0 +1,81 @@
+# Chinese IT Companies
+# One domain per line. Lines starting with # are comments.
+
+# Telecom / Network Equipment
+huawei.com
+huawei.net
+huaweiCloud.com
+hisilicon.com
+zte.com.cn
+zte.com
+h3c.com
+
+# Surveillance / IoT
+hikvision.com
+hikvision.com.cn
+dahua.com
+dahuatech.com
+
+# Security
+sangfor.com
+sangfor.com.cn
+nsfocus.com
+venusense.com
+venustech.com.cn
+topsec.com.cn
+antiy.cn
+qianxin.com
+qianxincloud.com
+yundun.com
+360.cn
+qihoo.com
+
+# Consumer Electronics
+xiaomi.com
+mi.com
+miwifi.com
+lenovo.com.cn
+tp-link.com.cn
+tplinkcloud.com
+tenda.com.cn
+tendacn.com
+
+# Cloud / Internet
+baidu.com
+baidubce.com
+alibaba.com
+alibabacloud.com
+aliyun.com
+taobao.com
+tmall.com
+tencent.com
+qq.com
+wechat.com
+weixin.qq.com
+qcloud.com.cn
+jd.com
+jdcloud.com
+netease.com
+kingsoft.com
+ksyun.com
+
+# Social / Apps
+bytedance.com
+douyin.com
+pinduoduo.com
+kuaishou.com
+meituan.com
+
+# Infrastructure
+inspursystems.com
+inspur.com
+digitalchina.com
+uniontech.com
+deepin.com
+deepin.org
+
+# Telecom Carriers
+chinaunicom.cn
+chinatelecom.cn
+cmcc.com
+chinamobile.com

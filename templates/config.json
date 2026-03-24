@@ -1,0 +1,6 @@
+{
+  "base_query": "(productCode:pdi OR productCode:xns)",
+  "default_orientation": "horizontal",
+  "default_log_type": "network",
+  "comment": "base_query is prepended to all searches. Change this to filter by different sensor types."
+}

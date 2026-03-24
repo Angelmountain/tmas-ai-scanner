@@ -1,0 +1,66 @@
+# Cloud Storage Services
+# One domain per line. Lines starting with # are comments.
+
+# Major Providers
+dropbox.com
+box.com
+icloud.com
+drive.google.com
+
+# Sync / Backup
+nextcloud.com
+owncloud.com
+syncthing.net
+idrive.com
+sync.com
+backblaze.com
+sugarsync.com
+protondrive.com
+icedrive.net
+internxt.com
+filen.io
+jottacloud.com
+storj.io
+
+# File Sharing
+mega.nz
+mega.io
+pcloud.com
+mediafire.com
+wetransfer.com
+sendspace.com
+solidfiles.com
+rapidgator.net
+uploadfiles.io
+sendgb.com
+gofile.io
+pixeldrain.com
+filetransfer.io
+mixdrop.co
+uploadhaven.com
+file.io
+transfernow.net
+send-anywhere.com
+1fichier.com
+
+# Enterprise
+sharefile.com
+egnyte.com
+
+# Privacy-focused
+spideroak.com
+tresorit.com
+
+# Russian
+disk.yandex.com
+
+# Misc
+koofr.eu
+anonfiles.com
+filemail.com
+terashare.net
+wasabi.com
+hubic.com
+scaleway.com
+ceph.io
+zippyshare.com

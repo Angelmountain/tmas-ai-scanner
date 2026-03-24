@@ -1,0 +1,11 @@
+# Firewall Vendors
+# One domain per line. Lines starting with # are comments.
+
+Cisco.com
+PaloAltoNetworks.com
+Fortinet.com
+CheckPoint.com
+Sophos.com
+Juniper.net
+SonicWall.com
+clavister.com

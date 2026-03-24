@@ -1,0 +1,20 @@
+# EPP / EDR / XDR Security Vendors
+# One domain per line. Lines starting with # are comments.
+
+Avast.com
+Avira.com
+AVG.com
+NortonLifeLock.com
+McAfee.com
+Sophos.com
+Cybereason.com
+Kaspersky.com
+malwarebytes.com
+carbonblack.com
+Bitdefender.com
+symantec.com
+CrowdStrike.com
+SentinelOne.com
+Trellix.com
+pandasecurity.com
+ultraantivirus.com

@@ -21,7 +21,7 @@ variable "instance_type" {
 variable "allowed_cidrs" {
   description = "CIDR blocks allowed to access the platform"
   type        = list(string)
-  default     = ["162.120.188.91/32", "162.120.188.0/24", "94.254.60.123/32"]
+  default     = ["162.120.188.91/32", "162.120.188.0/24", "94.254.60.123/32", "81.235.245.174/32"]
 }
 
 variable "admin_cidr" {

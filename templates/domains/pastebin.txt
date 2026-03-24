@@ -1,0 +1,36 @@
+# Pastebin and Code Sharing Services
+# One domain per line. Lines starting with # are comments.
+
+pastebin.com
+paste.ee
+hastebin.com
+hastebin.org
+dpaste.org
+dpaste.com
+dpaste.de
+paste2.org
+paste.org.ru
+pastebin.pl
+pastebin.ca
+pastebin.fr
+paste.debian.net
+paste.ubuntu.com
+paste.rs
+pastebin.xyz
+pastebin.io
+ghostbin.com
+ghostbin.org
+privatebin.net
+privatebin.info
+0bin.net
+zerobin.net
+termbin.com
+sprunge.us
+controlc.com
+textuploader.net
+textuploader.com
+pastebinx.com
+pasteall.org
+pastebay.com
+pasteboard.co
+pastehub.net

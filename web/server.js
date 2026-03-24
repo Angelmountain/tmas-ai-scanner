@@ -240,18 +240,21 @@ app.post('/api/config', (req, res) => {
 // ─── Pre-built Searches ─────────────────────────────────────────────────────
 app.get('/api/searches/prebuilt', (req, res) => {
   try {
-    const csvPath = path.join(TEMPLATES_DIR, 'input.csv');
-    if (!fs.existsSync(csvPath)) return res.status(404).json({ error: 'input.csv not found' });
+    // Prefer new searches.csv, fall back to legacy input.csv
+    let csvPath = path.join(TEMPLATES_DIR, 'searches.csv');
+    if (!fs.existsSync(csvPath)) csvPath = path.join(TEMPLATES_DIR, 'input.csv');
+    if (!fs.existsSync(csvPath)) return res.status(404).json({ error: 'No search config found' });
+
     const content = fs.readFileSync(csvPath, 'utf-8');
-    const lines = content.trim().split('\n');
+    const lines = content.trim().split('\n').filter(l => !l.trim().startsWith('#'));
     const headers = lines[0].split(',').map(h => h.trim());
     const searches = lines.slice(1).map(line => {
       const values = parseCSVLine(line);
       const obj = {};
       headers.forEach((h, i) => { obj[h] = values[i] || ''; });
       return obj;
-    });
-    res.json({ searches, headers });
+    }).filter(s => s.name && s.enabled !== 'false');
+    res.json({ searches, headers, format: csvPath.includes('searches.csv') ? 'new' : 'legacy' });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -359,7 +362,9 @@ app.post('/api/assessment/run', async (req, res) => {
     fs.writeFileSync(csvPath, [headers, ...rows].join('\n'));
     updateJob(job.id, { total: searches.length });
   } else {
-    csvPath = path.join(TEMPLATES_DIR, 'input.csv');
+    // Prefer new searches.csv, fall back to input.csv
+    csvPath = path.join(TEMPLATES_DIR, 'searches.csv');
+    if (!fs.existsSync(csvPath)) csvPath = path.join(TEMPLATES_DIR, 'input.csv');
   }
 
   res.json({ jobId: job.id });

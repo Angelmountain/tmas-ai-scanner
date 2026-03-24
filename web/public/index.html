@@ -456,7 +456,27 @@ async function loadSearches(){
 function renderSearches(){
   const g=document.getElementById('searchGrid');
   if(!searches.length){g.innerHTML='<div class="empty">No searches found</div>';return;}
-  g.innerHTML=searches.map((s,i)=>`<div class="sc ${s.selected?'sel':''}" onclick="toggleSearch(${i})"><div class="sc-chk">${s.selected?'&#10003;':''}</div><div><div class="sc-name">${esc(s.name)}</div><div class="sc-desc">${esc(s.description||s.log_type||'')}</div></div></div>`).join('');
+  // Group by category if available
+  const cats={};
+  searches.forEach((s,i)=>{const c=s.category||'General';if(!cats[c])cats[c]=[];cats[c].push({...s,idx:i});});
+  const catColors={Network:'bl',SSH:'cy',PUA:'pu',RDP:'am',Geo:'rd',Vendor:'gn',Threats:'err',General:'info'};
+  let html='';
+  for(const [cat,items] of Object.entries(cats)){
+    const allSel=items.every(s=>s.selected);
+    html+=`<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;margin-top:8px">
+      <span class="badge ${catColors[cat]||'info'}" style="cursor:pointer" onclick="toggleCategory('${cat}')">${cat}</span>
+      <span style="font-size:11px;color:var(--text3)">${items.length} searches</span>
+      <span style="font-size:11px;color:var(--primary);cursor:pointer" onclick="toggleCategory('${cat}')">${allSel?'deselect':'select'} all</span>
+    </div>`;
+    html+=items.map(s=>`<div class="sc ${s.selected?'sel':''}" onclick="toggleSearch(${s.idx})"><div class="sc-chk">${s.selected?'&#10003;':''}</div><div><div class="sc-name">${esc(s.name)}</div><div class="sc-desc">${esc(s.description||'')}</div></div></div>`).join('');
+  }
+  g.innerHTML=html;
+}
+function toggleCategory(cat){
+  const inCat=searches.filter(s=>(s.category||'General')===cat);
+  const allSel=inCat.every(s=>s.selected);
+  inCat.forEach(s=>s.selected=!allSel);
+  renderSearches();
 }
 function toggleSearch(i){searches[i].selected=!searches[i].selected;renderSearches();}
 function toggleAllSearches(v){searches.forEach(s=>s.selected=v);renderSearches();}

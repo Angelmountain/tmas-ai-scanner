@@ -1,0 +1,90 @@
+# US Technology Company Domains
+# One domain per line. Lines starting with # are comments.
+
+# Big Tech
+microsoft.com
+apple.com
+google.com
+amazon.com
+meta.com
+
+# Enterprise Software
+ibm.com
+oracle.com
+salesforce.com
+adobe.com
+service-now.com
+workday.com
+atlassian.com
+splunk.com
+hubspot.com
+veeva.com
+intuit.com
+
+# Communication
+zoom.us
+slack.com
+twilio.com
+ringcentral.com
+
+# Cloud / CDN
+akamai.com
+cloudflare.com
+snowflake.com
+datadoghq.com
+mongodb.com
+
+# Identity / Security
+okta.com
+fortinet.com
+paloaltonetworks.com
+crowdstrike.com
+netskope.com
+sentinellabs.com
+
+# Hardware / Chips
+intel.com
+cisco.com
+dell.com
+hp.com
+nvidia.com
+qualcomm.com
+broadcom.com
+micron.com
+amd.com
+texas-instruments.com
+analog.com
+klac.com
+onsemi.com
+microchip.com
+western-digital.com
+supermicro.com
+hpe.com
+
+# Infrastructure
+netapp.com
+citrix.com
+vmware.com
+redhat.com
+unity.com
+
+# Storage / Sharing
+dropbox.com
+box.com
+paypal.com
+palantir.com
+
+# Services / Consulting
+boozallen.com
+leidos.com
+saic.com
+concentrix.com
+cdw.com
+kyndryl.com
+dxc.com
+cognizant.com
+accenture.com
+infosys.com
+tcs.com
+wipro.com
+capgemini.com

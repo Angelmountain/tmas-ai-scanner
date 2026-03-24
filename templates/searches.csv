@@ -1,0 +1,58 @@
+category,name,description,sorting,log_type,ppt_slide,enabled,query_type,query_value
+# ──────────────────────────────────────────────────────────────────────────────
+# CORE NETWORK ANALYSIS
+# ──────────────────────────────────────────────────────────────────────────────
+Network,Network Detections,All detections from both sensors,ruleName,detections,6,true,base,
+Network,Top Accounts,User accounts in network data,suid,network,7,true,filter,suid:*
+Network,Server Ports,Most used server ports,serverPort,network,8,true,filter,serverPort:*
+Network,Unsuccessful Logon,Failed login attempts,ruleName,detections,9,true,filter,ruleName:("*unsuccessful*logon*" OR "*failed*logon*" OR "*logon*fail*")
+Network,Top Files,Most frequently accessed files,fileName,network,,true,filter,fileName:*
+Network,File Types,Most common file types,fileType,network,,true,filter,fileType:*
+Network,Protocols,Network protocol usage,app,network,12,true,filter,app:*
+Network,Request Methods,HTTP request methods,requestMethod,network,13,true,filter,requestMethod:*
+Network,Response Codes,HTTP response code distribution,respCode,network,14,true,filter,respCode:*
+Network,SSL Certificates,SSL certificate common names,sslCertCommonName,network,15,true,filter,sslCertCommonName:*
+# ──────────────────────────────────────────────────────────────────────────────
+# SSH MONITORING
+# ──────────────────────────────────────────────────────────────────────────────
+SSH,SSH Detections,SSH-related detection events,ruleName,detections,17,true,filter,ruleName:*SSH*
+SSH,SSH Versions,SSH protocol versions in use,respAppVersion,network,18,true,filter,app:SSH
+# ──────────────────────────────────────────────────────────────────────────────
+# POTENTIALLY UNWANTED APPLICATIONS (PUA)
+# ──────────────────────────────────────────────────────────────────────────────
+PUA,PUA AI Services,AI and ML platform usage,hostName,network,20,true,domains,ai_services.txt
+PUA,PUA Remote Access,Remote access tools,hostName,network,22,true,domains,remote_access.txt
+PUA,PUA Cloud Storage,Cloud storage services,hostName,network,23,true,domains,cloud_storage.txt
+PUA,PUA Darknet,Tor hidden services (.onion),hostName,network,26,true,filter,hostName:*.onion
+PUA,PUA VPN Services,VPN and proxy services,hostName,network,24,true,domains,vpn_services.txt
+PUA,PUA Pastebin,Pastebin and code sharing,hostName,network,25,true,domains,pastebin.txt
+PUA,PUA Admin Usage,Administrator account activity,app,network,27,true,filter,suid:administrator
+PUA,Root Detections,Root account detections,ruleName,detections,21,true,filter,ruleName:*root*
+# ──────────────────────────────────────────────────────────────────────────────
+# RDP MONITORING
+# ──────────────────────────────────────────────────────────────────────────────
+RDP,RDP Users,RDP user activity,suid,network,29,true,filter,app:RDP
+RDP,RDP Source IPs,RDP source IP addresses,clientIp,network,30,true,filter,app:RDP
+RDP,RDP Dest IPs,RDP destination IP addresses,serverIp,network,31,true,filter,app:RDP
+RDP,RDP Detections,RDP-related detections,ruleName,detections,42,true,filter,ruleName:*RDP*
+RDP,External RDP,RDP to external IPs,serverIp,network,,true,raw,(productCode:pdi OR productCode:xns) AND app:RDP AND NOT serverIp:(10.* OR 192.168.* OR 172.16.* OR 172.17.* OR 172.18.* OR 172.19.* OR 172.20.* OR 172.21.* OR 172.22.* OR 172.23.* OR 172.24.* OR 172.25.* OR 172.26.* OR 172.27.* OR 172.28.* OR 172.29.* OR 172.30.* OR 172.31.*)
+# ──────────────────────────────────────────────────────────────────────────────
+# GEOGRAPHIC / VENDOR RISK
+# ──────────────────────────────────────────────────────────────────────────────
+Geo,Suspicious TLDs,Traffic to suspicious TLDs,hostName,network,33,true,tlds,tk ml ga cf gq su to cc pw biz info top me xyz club work space men click loan win asia today lol world website wiki bar rest uno best ws social shop cfd quest
+Geo,Bad States,Sanctioned country traffic,hostName,network,34,true,tlds,kp ru cu by sy ir ve sd
+Geo,Russian IT,Russian IT company domains,hostName,network,35,true,domains,russian_it.txt
+Geo,Chinese IT,Chinese IT company domains,hostName,network,36,true,domains,chinese_it.txt
+Vendor,Security Vendors,EPP/EDR/XDR vendor domains,hostName,network,37,true,domains,security_vendors.txt
+Vendor,Firewall Vendors,Firewall vendor domains,hostName,network,38,true,domains,firewall_vendors.txt
+Vendor,US Vendors,US tech company domains,hostName,network,39,true,domains,us_vendors.txt
+# ──────────────────────────────────────────────────────────────────────────────
+# EXTERNAL THREATS
+# ──────────────────────────────────────────────────────────────────────────────
+Threats,External Attacks,Inbound attack detections,ruleName,detections,40,true,raw,(productCode:pdi) AND tacticId:(TA0043 OR TA0042 OR TA0001 OR TA0002) AND filterRiskLevel:(critical OR high OR medium) AND tags:*inbound*
+Threats,Web Rep RU,Web Reputation for .ru domains,ruleName,detections,,true,filter,hostName:*.ru AND ruleName:*Web Reputation*
+Threats,DNS Dead IP,DNS resolving to dead IPs,ruleName,detections,,true,filter,ruleName:"DNS response resolves to dead IP address"
+Threats,External SSH,SSH to external IPs,serverIp,network,,true,raw,(productCode:pdi OR productCode:xns) AND app:SSH AND NOT serverIp:(10.* OR 192.168.* OR 172.16.* OR 172.17.* OR 172.18.* OR 172.19.* OR 172.20.* OR 172.21.* OR 172.22.* OR 172.23.* OR 172.24.* OR 172.25.* OR 172.26.* OR 172.27.* OR 172.28.* OR 172.29.* OR 172.30.* OR 172.31.*)
+Threats,External Protocols,Non-standard external protocols,app,network,,true,raw,(productCode:pdi OR productCode:xns) AND NOT app:(TLS OR DNS OR HTTP OR TCP) AND NOT serverIp:(10.* OR 192.168.* OR 172.16.* OR 172.17.* OR 172.18.* OR 172.19.* OR 172.20.* OR 172.21.* OR 172.22.* OR 172.23.* OR 172.24.* OR 172.25.* OR 172.26.* OR 172.27.* OR 172.28.* OR 172.29.* OR 172.30.* OR 172.31.*)
+Threats,File Downloads,Executable/archive downloads,request,network,,true,filter,request:(*.exe OR *.dll OR *.bat OR *.vbs OR *.jar OR *.scr OR *.ps1 OR *.iso OR *.apk OR *.zip OR *.rar OR *.msi OR *.cmd) AND requestMethod:GET
+Threats,Cert Downloads,Certificate file downloads,request,network,,true,filter,request:*.crt

@@ -648,6 +648,101 @@ def process_single_search(
 
 
 # ---------------------------------------------------------------------------
+# New-format query builder
+# ---------------------------------------------------------------------------
+def _load_domain_file(domains_dir: str, filename: str) -> List[str]:
+    """Read a domain list file, returning non-empty non-comment lines."""
+    filepath = os.path.join(domains_dir, filename)
+    if not os.path.exists(filepath):
+        logger.warning("Domain file not found: %s", filepath)
+        return []
+    with open(filepath, "r", encoding="utf-8") as fh:
+        return [
+            line.strip()
+            for line in fh
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+
+def _load_config(templates_dir: str) -> Dict[str, str]:
+    """Load config.json from templates directory."""
+    config_path = os.path.join(templates_dir, "config.json")
+    if os.path.exists(config_path):
+        try:
+            import json as _json
+            with open(config_path, "r") as fh:
+                return _json.load(fh)
+        except Exception as exc:
+            logger.warning("Could not load config.json: %s", exc)
+    return {"base_query": "(productCode:pdi OR productCode:xns)"}
+
+
+def _build_queries_from_new_format(
+    raw_searches: List[Dict[str, str]], csv_path: str
+) -> List[Dict[str, str]]:
+    """Convert new searches.csv format into old format with built queries.
+
+    Query types:
+      base    - just the base query (no additional filter)
+      filter  - base query AND <query_value>
+      domains - base query AND hostName:(*domain1 OR *domain2 ...)
+      tlds    - base query AND hostName:(*.tld1 OR *.tld2 ...)
+      raw     - query_value used as-is (no base_query prepended)
+    """
+    templates_dir = str(Path(csv_path).parent)
+    domains_dir = os.path.join(templates_dir, "domains")
+    config = _load_config(templates_dir)
+    base_query = config.get("base_query", "(productCode:pdi OR productCode:xns)")
+
+    result = []
+    for row in raw_searches:
+        qtype = row.get("query_type", "base").strip().lower()
+        qval = row.get("query_value", "").strip()
+
+        if qtype == "base":
+            query = base_query
+        elif qtype == "filter":
+            query = f"{base_query} AND {qval}" if qval else base_query
+        elif qtype == "domains":
+            domains = _load_domain_file(domains_dir, qval)
+            if domains:
+                domain_expr = " OR ".join(f"*{d}" for d in domains)
+                query = f"{base_query} AND hostName:({domain_expr})"
+            else:
+                query = base_query
+                logger.warning("No domains loaded for %s", row.get("name"))
+        elif qtype == "tlds":
+            tlds = qval.split()
+            if tlds:
+                tld_expr = " OR ".join(f"*.{t}" for t in tlds)
+                query = f"{base_query} AND hostName:({tld_expr})"
+            else:
+                query = base_query
+        elif qtype == "raw":
+            query = qval
+        else:
+            logger.warning("Unknown query_type '%s' for %s, using base", qtype, row.get("name"))
+            query = base_query
+
+        # Convert to old format that process_single_search expects
+        result.append({
+            "name": row.get("name", "").strip(),
+            "description": row.get("description", "").strip(),
+            "sorting": row.get("sorting", "default").strip(),
+            "log_type": row.get("log_type", config.get("default_log_type", "network")).strip(),
+            "orientation": row.get("orientation", config.get("default_orientation", "horizontal")).strip(),
+            "enabled": row.get("enabled", "true").strip(),
+            "query": query,
+            # Preserve new fields for display
+            "category": row.get("category", "").strip(),
+            "ppt_slide": row.get("ppt_slide", "").strip(),
+        })
+
+    logger.info("Built %d queries from new format (base: %s)", len(result), base_query[:50])
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Main orchestration
 # ---------------------------------------------------------------------------
 def run_assessment(
@@ -675,17 +770,30 @@ def run_assessment(
         "Assessment window: %s -> %s (%d hours)", start_time, end_time, time_interval
     )
 
-    # Read CSV
+    # Read CSV (supports both old format and new searches.csv format)
     with open(csv_path, newline="", encoding="utf-8") as fh:
-        reader = csv.DictReader(fh)
-        searches = list(reader)
+        # Skip comment lines
+        lines = [l for l in fh if not l.strip().startswith("#")]
+    reader = csv.DictReader(lines)
+    raw_searches = [r for r in reader if r.get("name", "").strip()]
+
+    # Detect format: new format has "query_type" column, old has "query"
+    is_new_format = any("query_type" in r for r in raw_searches)
+
+    if is_new_format:
+        searches = _build_queries_from_new_format(raw_searches, csv_path)
+    else:
+        searches = raw_searches
+
+    # Filter to enabled only
+    searches = [s for s in searches if s.get("enabled", "true").lower() not in ("false", "0", "no")]
 
     total = len(searches)
     if total == 0:
         emit_complete("success", [], {"total": 0, "with_data": 0, "records": 0})
         return
 
-    logger.info("Loaded %d search definitions from %s", total, csv_path)
+    logger.info("Loaded %d search definitions from %s (%s format)", total, csv_path, "new" if is_new_format else "legacy")
 
     # Run searches concurrently
     all_results: List[Dict[str, Any]] = [{}] * total  # preserve order

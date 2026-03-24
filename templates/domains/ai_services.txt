@@ -1,0 +1,165 @@
+# AI Services - Generative AI, LLMs, ML platforms
+# One domain per line. Lines starting with # are comments.
+
+# OpenAI / ChatGPT
+openai.com
+chatgpt.com
+api.openai.com
+
+# Microsoft Copilot / Azure AI
+copilot.microsoft.com
+ai.azure.com
+copilot.bing.com
+designer.microsoft.com
+labs.copilot.microsoft.com
+
+# Google AI
+bard.google.com
+gemini.google.com
+ai.google.com
+palm.google.com
+notebooklm.google.com
+duetai.google.com
+deepmind.com
+
+# Anthropic / Claude
+anthropic.com
+claude.ai
+console.anthropic.com
+
+# DeepSeek
+deepseek.com
+deepseek.ai
+
+# Open Source / Platforms
+huggingface.co
+cohere.ai
+ai21.com
+lighton.ai
+replicate.com
+modal.com
+together.ai
+lightning.ai
+gradient.ai
+runpod.io
+
+# Writing / Content
+writer.com
+writer.me
+jasper.ai
+copy.ai
+anyword.com
+writesonic.com
+rytr.me
+neuroflash.com
+textcortex.com
+simplified.com
+
+# Image Generation
+stability.ai
+dreamstudio.ai
+midjourney.com
+runwayml.com
+ideogram.ai
+playground.ai
+leonardo.ai
+mage.space
+lexica.art
+fotor.com
+canva.com
+firefly.adobe.com
+remove.bg
+clipdrop.co
+
+# Voice / Audio
+elevenlabs.io
+play.ht
+resemble.ai
+murf.ai
+voicemod.net
+fakeyou.com
+lovo.ai
+speechify.com
+soundful.com
+soundraw.io
+audiocraft.meta.com
+
+# Video
+synthesia.io
+heygen.com
+colossyan.com
+pikalabs.com
+kaiber.ai
+invideo.io
+lumen5.com
+animoto.com
+
+# Meeting / Transcription
+fireflies.ai
+fathom.video
+otter.ai
+gong.io
+chorus.ai
+speak.ai
+sonix.ai
+
+# Research
+elicit.org
+scite.ai
+perplexity.ai
+you.com
+you.ai
+poe.com
+
+# Translation
+deepl.com
+deeplwrite.com
+
+# Cloud ML Services
+watson.ibm.com
+rekognition.amazonaws.com
+comprehend.amazonaws.com
+bedrock.aws.amazon.com
+sageMaker.aws.amazon.com
+vertexai.google.com
+ml.azure.com
+
+# Meta AI
+meta.ai
+llama.meta.com
+segment-anything.com
+fairscale.ai
+
+# Chatbots
+replika.com
+character.ai
+chatsonic.com
+inworld.ai
+pi.ai
+inflection.ai
+forefront.ai
+
+# Code Assistants
+blackbox.ai
+phind.com
+tabnine.com
+codeium.com
+sourcegraph.com
+cursor.sh
+continue.dev
+aider.chat
+
+# Presentation / Design
+deepbrain.io
+tldrthis.com
+slidesgo.com
+beautiful.ai
+vectara.com
+
+# Other
+kare.ai
+soulmachines.com
+airoboros.com
+reka.ai
+scenario.com
+civitai.com

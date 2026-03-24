@@ -1,0 +1,18 @@
+# Russian IT Companies
+# One domain per line. Lines starting with # are comments.
+
+kaspersky.com
+ptsecurity.com
+solar.rt.ru
+infotecs.ru
+bi.zone
+innostage.ru
+norsi-trans.ru
+jet.su
+citadel.ru
+softline.com
+selectel.com
+yandex.cloud
+nano-av.com
+cognitive.ru
+platform.altergeo.ru

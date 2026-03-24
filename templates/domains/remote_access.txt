@@ -1,0 +1,57 @@
+# Remote Access Tools
+# One domain per line. Lines starting with # are comments.
+
+# Major Tools
+teamviewer.com
+anydesk.com
+logmein.com
+gotomypc.com
+splashtop.com
+realvnc.com
+connectwise.com
+screenconnect.com
+
+# Google / Chrome
+remotedesktop.google.com
+chrome-remote-desktop.com
+
+# Enterprise
+bomgar.com
+beyondtrust.com
+dameware.com
+kaseya.com
+n-able.com
+teradici.com
+devolutions.net
+netop.com
+manageengine.com
+zohoassist.com
+zoho.com
+
+# Open Source / Free
+rustdesk.com
+meshcentral.com
+tightvnc.com
+nomachine.com
+remoteutilities.com
+remmina.org
+uvnc.com
+lite-manager.com
+radmin.com
+
+# Other
+parallels.com
+remotepc.com
+dwservice.net
+ammyy.com
+aeroadmin.com
+jumpdesktop.com
+getsupport.com
+supremo.controlit.com
+fixme.it
+remote.to
+goanywhere.com
+rport.io
+helpwire.app
+splashtopremote.com
+netviewer.com
