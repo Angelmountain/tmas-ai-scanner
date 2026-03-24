@@ -213,52 +213,6 @@ class VisionOneClient:
 
         return results
 
-    # ----- adaptive recursive chunk search -----
-    def _search_adaptive(
-        self,
-        log_type: str,
-        start_dt: datetime,
-        end_dt: datetime,
-        query: Optional[str] = None,
-        select: Optional[str] = None,
-        depth: int = 0,
-    ) -> List[Dict[str, Any]]:
-        """Search a time window; if it hits the 10K limit, split and recurse.
-
-        Starts with the full window. If a chunk returns >=9500 records
-        (near the 10K API limit), it splits that chunk in half and retries
-        both halves. This ensures ALL data is captured while minimising
-        API calls for sparse time periods.
-
-        Max recursion depth of 8 (~1h minimum chunk for a 30-day window).
-        """
-        cs = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        ce = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        items = self._search_chunk(log_type, cs, ce, query=query, select=select)
-        count = len(items)
-
-        # If below limit or can't split further, return as-is
-        duration = (end_dt - start_dt).total_seconds()
-        if count < 9500 or depth >= 8 or duration < 3600:
-            return items
-
-        # Hit the limit — split in half and recurse
-        mid = start_dt + timedelta(seconds=duration / 2)
-        logger.info(
-            "Chunk %s→%s hit %d records (depth %d), splitting...",
-            cs[:16], ce[:16], count, depth,
-        )
-        time.sleep(0.1)
-        left = self._search_adaptive(
-            log_type, start_dt, mid, query=query, select=select, depth=depth + 1
-        )
-        time.sleep(0.1)
-        right = self._search_adaptive(
-            log_type, mid, end_dt, query=query, select=select, depth=depth + 1
-        )
-        return left + right
-
     # ----- main search entry point -----
     def search_logs(
         self,
@@ -268,14 +222,16 @@ class VisionOneClient:
         query: Optional[str] = None,
         sorting_field: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Execute a search with adaptive time-chunking.
+        """Execute a search with fixed time-chunking.
 
-        Splits the time range into initial 12-hour windows. Any window that
-        hits the API's ~10K record limit is automatically split into smaller
-        sub-windows recursively until all data is captured.
+        Splits the time range into 6-hour windows. Each chunk fetches up to
+        10K records (API limit). For a 30-day window that's ~120 chunks,
+        yielding up to 1.2M records total.
 
         Uses ``select`` (network only) to fetch only the aggregation field,
         keeping records small so more fit per API page.
+
+        No recursive splitting - simple and predictable.
         """
         if log_type not in ("network", "detections", "everything"):
             logger.error("Invalid log type '%s'.", log_type)
@@ -297,8 +253,8 @@ class VisionOneClient:
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
 
-        # Initial chunk size: 12 hours (splits adaptively if needed)
-        chunk_hours = 12
+        # Fixed 6-hour chunks - simple, fast, predictable
+        chunk_hours = 6
         num_chunks = max(1, int(duration_hours / chunk_hours) + 1)
 
         all_results: List[Dict[str, Any]] = []
@@ -306,8 +262,8 @@ class VisionOneClient:
         for lt in log_types:
             sel = select if lt == "network" else None
             logger.info(
-                "Searching %s | %d initial chunks | select=%s | query: %s",
-                lt, num_chunks, sel, (query or "")[:80],
+                "Searching %s | %d chunks of %dh | select=%s | query: %s",
+                lt, num_chunks, chunk_hours, sel, (query or "")[:80],
             )
 
             chunk_start = start_dt
@@ -316,31 +272,29 @@ class VisionOneClient:
                 if chunk_start >= end_dt:
                     break
 
-                items = self._search_adaptive(
-                    lt, chunk_start, chunk_end, query=query, select=sel,
-                )
+                cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+                ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+                items = self._search_chunk(lt, cs, ce, query=query, select=sel)
                 if items:
                     all_results.extend(items)
-
-                if (chunk_idx + 1) % 5 == 0 or chunk_idx == 0:
-                    logger.info(
-                        "Progress: chunk %d/%d, total records: %d",
-                        chunk_idx + 1, num_chunks, len(all_results),
-                    )
 
                 chunk_start = chunk_end
 
                 # Cap total records to prevent OOM
                 if len(all_results) >= MAX_RECORDS_PER_SEARCH:
                     logger.warning(
-                        "Hit %d record cap for %s, stopping early",
-                        MAX_RECORDS_PER_SEARCH, lt,
+                        "Hit %d record cap for %s after %d chunks",
+                        MAX_RECORDS_PER_SEARCH, lt, chunk_idx + 1,
                     )
                     break
 
                 time.sleep(0.1)
 
-            logger.info("Completed %s search. Total items: %d", lt, len(all_results))
+            logger.info(
+                "Completed %s search. %d records from %d chunks.",
+                lt, len(all_results), min(chunk_idx + 1, num_chunks),
+            )
 
         return all_results
 

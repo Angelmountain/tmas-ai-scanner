@@ -74,47 +74,62 @@ TREND_COLORS = {
 # ---------------------------------------------------------------------------
 
 SLIDE_MAPPING: Dict[str, Optional[int]] = {
+    # Names match searches.csv (new format)
     "Network Detections": 6,
+    "Top Accounts": 7,
+    "Server Ports": 8,
+    "Unsuccessful Logon": 9,
+    "Top Files": None,
+    "File Types": None,
+    "Protocols": 12,
+    "Request Methods": 13,
+    "Response Codes": 14,
+    "SSL Certificates": 15,
+    "SSH Detections": 17,
+    "SSH Versions": 18,
+    "PUA AI Services": 20,
+    "Root Detections": 21,
+    "PUA Remote Access": 22,
+    "PUA Cloud Storage": 23,
+    "PUA VPN Services": 24,
+    "PUA Pastebin": 25,
+    "PUA Darknet": 26,
+    "PUA Admin Usage": 27,
+    "RDP Users": 29,
+    "RDP Source IPs": 30,
+    "RDP Dest IPs": 31,
+    "Suspicious TLDs": 33,
+    "Bad States": 34,
+    "Russian IT": 35,
+    "Chinese IT": 36,
+    "Security Vendors": 37,
+    "Firewall Vendors": 38,
+    "US Vendors": 39,
+    "External Attacks": 40,
+    "Web Rep RU": 41,
+    "RDP Detections": 42,
+    "DNS Dead IP": None,
+    "External RDP": None,
+    "External SSH": None,
+    "External Protocols": None,
+    "File Downloads": None,
+    "Cert Downloads": None,
+    # Legacy names (backward compat with old input.csv)
     "Top Accounts used": 7,
     "Server ports used": 8,
     "Unsuccessful logon": 9,
-    "Top File used": None,           # No slide in v2.0 template
-    "Top File types used": None,     # No slide in v2.0 template
     "Protocols used": 12,
     "Request methods": 13,
     "Response codes": 14,
     "SSL Cert Common Name": 15,
-    "SSH Detections": 17,
-    "SSH Versions": 18,
-    "PUA AI Services": 20,
-    "PUA root detections": 21,
-    "PUA Remote Access": 22,
-    "PUA Cloud Storage": 23,
-    "PUA VPN Services": 24,          # slide title: "PUA country connections"
-    "PUA Pastebin": 25,              # slide title: "PUA email attachments"
     "PUA Darknet links": 26,
     "PUA Administrator Usage": 27,
     "RDP User Usage": 29,
     "RDP Source IP": 30,
     "RDP Destination IP": 31,
-    "Suspicious TLDs": 33,           # slide title: ".CH requests"
-    "Bad States": 34,                # slide title: ".RU requests"
     "Russian IT-companies": 35,
-    "Chinese IT-companies": 36,         # May not have chart in template
+    "Chinese IT-companies": 36,
     "EPP/EDR/XDR Vendors": 37,
-    "Firewall Vendors": 38,
-    "US Vendors": 39,
-    # Additional searches from GitHub Actions (data table only if no slide)
-    "External Attacks": 40,
-    "Web Rep RU": 41,
-    "RDP Detections": 42,
-    "Root Detections": 21,               # Same as PUA root detections
-    "DNS Dead IP": None,
-    "File Downloads": None,
-    "Cert Downloads": None,
-    "External RDP": None,
-    "External SSH": None,
-    "External Protocols": None,
 }
 
 # Maximum categories shown per chart / fallback table
