@@ -263,7 +263,7 @@ textarea{resize:vertical;min-height:60px}
   </div>
   <div class="sg" id="searchGrid"><div class="empty"><div class="empty-icon">&#9203;</div>Loading searches...</div></div>
 
-  <div class="btn-group"><button class="btn btn-p" id="btnRun" onclick="runAssessment()">Run Assessment</button></div>
+  <div class="btn-group"><button class="btn btn-p" id="btnRun" onclick="runAssessment()">Run Assessment</button><button class="btn btn-d" id="btnStop" onclick="stopJob()" style="display:none">Stop</button></div>
 
   <!-- Pipeline / Progress -->
   <div id="pipelineSection" style="display:none;margin-top:18px">
@@ -362,7 +362,7 @@ textarea{resize:vertical;min-height:60px}
       <div class="fg"><label class="fl">System Prompt (optional)</label><textarea id="aiSysPrompt" placeholder="Custom system prompt..."></textarea></div>
     </div>
   </div>
-  <div class="btn-group"><button class="btn btn-p" id="btnAiScan" onclick="runAiScan()">Run AI Scan</button></div>
+  <div class="btn-group"><button class="btn btn-p" id="btnAiScan" onclick="runAiScan()">Run AI Scan</button><button class="btn btn-d" id="btnAiStop" onclick="stopJob()" style="display:none">Stop</button></div>
   <div id="aiProgress" style="display:none;margin-top:16px">
     <div class="pipeline" id="aiPipeline"></div>
     <div class="commentary" id="aiComment">Initializing scan...</div>
@@ -501,6 +501,7 @@ async function runCustom(){
 }
 async function startAssessmentJob(key,sel,csvContent){
   document.getElementById('btnRun').disabled=true;
+  showStopBtn();
   document.getElementById('pipelineSection').style.display='block';
   document.getElementById('resultsSection').style.display='none';
   document.getElementById('errorSection').style.display='none';
@@ -529,6 +530,7 @@ async function startAssessmentJob(key,sel,csvContent){
   }catch(e){
     toast('Failed: '+e.message,'err');
     document.getElementById('btnRun').disabled=false;
+    hideStopBtn();
     showError('Failed to start assessment',e.message);
   }
 }
@@ -558,6 +560,7 @@ async function pollAssessment(id){
     if(j.status!=='running'){
       clearInterval(pollTimer);pollTimer=null;
       document.getElementById('btnRun').disabled=false;
+      hideStopBtn();
       document.getElementById('progressBar').style.width='100%';
       if(j.status==='completed'){
         renderPipeline(document.getElementById('pipeline'),[
@@ -672,6 +675,25 @@ function toggleResult(el){const bd=el.nextElementSibling,ch=el.querySelector('.c
 function downloadJob(type){if(!activeJob)return;window.location=type==='zip'?'/api/assessment/download/'+activeJob:'/api/assessment/ppt/'+activeJob;}
 function showError(title,msg){document.getElementById('errorSection').style.display='block';document.getElementById('errorSection').innerHTML=`<div class="error-box"><h4>${esc(title)}</h4><p>${esc(msg)}</p></div>`;}
 function fmtNum(n){return typeof n==='number'?n.toLocaleString():n;}
+async function stopJob(){
+  if(!activeJob)return;
+  try{
+    const r=await fetch('/api/jobs/'+activeJob+'/stop',{method:'POST'});
+    const d=await r.json();
+    if(d.success){
+      toast('Job stopped','info');
+      if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+      document.getElementById('btnRun').disabled=false;
+      document.getElementById('btnAiScan').disabled=false;
+      document.getElementById('btnStop').style.display='none';
+      document.getElementById('btnAiStop').style.display='none';
+      document.getElementById('pipelineComment').textContent='Assessment stopped by user.';
+      document.getElementById('pipelineComment').className='commentary warn';
+    }
+  }catch(e){toast('Failed to stop: '+e.message,'err');}
+}
+function showStopBtn(){document.getElementById('btnStop').style.display='';document.getElementById('btnAiStop').style.display='';}
+function hideStopBtn(){document.getElementById('btnStop').style.display='none';document.getElementById('btnAiStop').style.display='none';}
 
 // ═══ CSV ═══
 const dz=document.getElementById('dropzone');

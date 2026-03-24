@@ -654,6 +654,18 @@ app.get('/api/jobs', (req, res) => {
   res.json(listAllJobs());
 });
 
+app.post('/api/jobs/:jobId/stop', (req, res) => {
+  const job = jobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Job not found' });
+  if (job.status !== 'running') return res.json({ success: true, message: 'Job not running' });
+  if (job._proc) {
+    job._proc.kill('SIGTERM');
+    job.console.push({ type: 'stderr', text: 'Job stopped by user\n', ts: Date.now() });
+  }
+  updateJob(req.params.jobId, { status: 'stopped', finishedAt: Date.now() });
+  res.json({ success: true });
+});
+
 app.delete('/api/jobs/:jobId', (req, res) => {
   const jobDir = path.join(JOBS_DIR, req.params.jobId);
   if (!fs.existsSync(jobDir)) return res.status(404).json({ error: 'Job not found' });
