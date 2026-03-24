@@ -355,11 +355,21 @@ app.post('/api/assessment/run', async (req, res) => {
     fs.writeFileSync(csvPath, csvContent);
   } else if (searches && searches.length > 0) {
     csvPath = path.join(jobDir, 'input.csv');
-    const headers = 'name,description,sorting,log_type,orientation,query';
-    const rows = searches.map(s =>
-      `${s.name},"${(s.description || '').replace(/"/g, '""')}",${s.sorting || 'default'},${s.log_type || 'network'},${s.orientation || 'horizontal'},"${(s.query || '').replace(/"/g, '""')}"`
-    );
-    fs.writeFileSync(csvPath, [headers, ...rows].join('\n'));
+    // Detect format: new format has query_type, old format has query
+    const isNewFormat = searches[0].query_type;
+    if (isNewFormat) {
+      const headers = 'category,name,description,sorting,log_type,ppt_slide,enabled,query_type,query_value';
+      const rows = searches.map(s =>
+        `${s.category || ''},"${(s.name || '').replace(/"/g, '""')}","${(s.description || '').replace(/"/g, '""')}",${s.sorting || 'default'},${s.log_type || 'network'},${s.ppt_slide || ''},true,${s.query_type || 'base'},"${(s.query_value || '').replace(/"/g, '""')}"`
+      );
+      fs.writeFileSync(csvPath, [headers, ...rows].join('\n'));
+    } else {
+      const headers = 'name,description,sorting,log_type,orientation,query';
+      const rows = searches.map(s =>
+        `${s.name},"${(s.description || '').replace(/"/g, '""')}",${s.sorting || 'default'},${s.log_type || 'network'},${s.orientation || 'horizontal'},"${(s.query || '').replace(/"/g, '""')}"`
+      );
+      fs.writeFileSync(csvPath, [headers, ...rows].join('\n'));
+    }
     updateJob(job.id, { total: searches.length });
   } else {
     // Prefer new searches.csv, fall back to input.csv

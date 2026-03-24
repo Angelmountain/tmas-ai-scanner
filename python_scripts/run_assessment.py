@@ -689,9 +689,19 @@ def _build_queries_from_new_format(
       tlds    - base query AND hostName:(*.tld1 OR *.tld2 ...)
       raw     - query_value used as-is (no base_query prepended)
     """
-    templates_dir = str(Path(csv_path).parent)
+    # Find the templates directory - could be the CSV's parent (if reading
+    # from templates/) or the repo's templates/ dir (if reading from a job dir)
+    csv_parent = Path(csv_path).parent
+    # Check if domains/ exists next to the CSV
+    if (csv_parent / "domains").is_dir():
+        templates_dir = str(csv_parent)
+    else:
+        # Walk up to find templates/domains/ (repo root/templates/)
+        repo_root = Path(__file__).parent.parent
+        templates_dir = str(repo_root / "templates")
     domains_dir = os.path.join(templates_dir, "domains")
     config = _load_config(templates_dir)
+    logger.info("Templates dir: %s, Domains dir exists: %s", templates_dir, os.path.isdir(domains_dir))
     base_query = config.get("base_query", "(productCode:pdi OR productCode:xns)")
 
     result = []
