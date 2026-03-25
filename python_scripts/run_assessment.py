@@ -248,8 +248,14 @@ class VisionOneClient:
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
 
-        # Fixed 6-hour chunks
-        chunk_hours = 6
+        # Chunk size: 1h for short windows (<=48h), 3h for medium, 6h for long
+        # Smaller chunks = less data truncation per chunk = more complete results
+        if duration_hours <= 48:
+            chunk_hours = 1
+        elif duration_hours <= 168:
+            chunk_hours = 3
+        else:
+            chunk_hours = 6
         num_chunks = max(1, int(duration_hours / chunk_hours) + 1)
 
         counts: Dict[str, int] = {}
