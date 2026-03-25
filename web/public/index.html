@@ -888,6 +888,7 @@ async function loadManage(){
   try{
     const r=await fetch('/api/searches/prebuilt');const d=await r.json();
     const s=d.searches||[];
+    mAllSearches=s;
     document.getElementById('mSearchCount').textContent=s.length+' searches';
     const catColors={Network:'info',SSH:'cy',PUA:'pu',RDP:'warn',Geo:'err',Vendor:'ok',Threats:'err'};
     document.getElementById('mSearchTable').innerHTML=`<table class="dtbl">
@@ -958,13 +959,93 @@ async function saveEditor(){
 
 function closeEditor(){document.getElementById('mRawEditor').style.display='none';}
 
-function addSearch(){
-  // Open raw CSV editor with cursor at bottom
-  editRawCSV();
-  setTimeout(()=>{const ta=document.getElementById('mEditorContent');ta.scrollTop=ta.scrollHeight;ta.setSelectionRange(ta.value.length,ta.value.length);ta.focus();},300);
+let mAllSearches=[];
+function addSearch(){openSearchForm(-1);}
+function editSearchRow(idx){openSearchForm(idx);}
+
+function openSearchForm(idx){
+  const s=idx>=0?mAllSearches[idx]:{category:'',name:'',description:'',sorting:'hostName',log_type:'network',ppt_slide:'',enabled:'true',query_type:'filter',query_value:''};
+  const isNew=idx<0;
+  const title=isNew?'Add New Search':`Edit: ${s.name}`;
+  const cats=['Network','SSH','PUA','RDP','Geo','Vendor','Threats'];
+  const sorts=['ruleName','hostName','app','suid','serverPort','clientIp','serverIp','requestMethod','respCode','sslCertCommonName','fileName','fileType','respAppVersion','request'];
+  const qtypes=['base','filter','domains','tlds','raw'];
+  const el=document.getElementById('mRawEditor');
+  document.getElementById('mEditorTitle').textContent=title;
+  el.querySelector('div > div').innerHTML=`
+    <h3 style="margin-bottom:12px">${title}</h3>
+    <div class="fr"><div class="fg"><label class="fl">Category</label><select id="sf_cat">${cats.map(c=>`<option ${c===s.category?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Name (unique)</label><input id="sf_name" value="${esc(s.name)}"></div></div>
+    <div class="fg"><label class="fl">Description</label><input id="sf_desc" value="${esc(s.description||'')}"></div>
+    <div class="fr"><div class="fg"><label class="fl">Sort / Aggregate By</label><select id="sf_sort">${sorts.map(f=>`<option ${f===s.sorting?'selected':''}>${f}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Log Type</label><select id="sf_log"><option ${s.log_type==='network'?'selected':''}>network</option><option ${s.log_type==='detections'?'selected':''}>detections</option><option ${s.log_type==='everything'?'selected':''}>everything</option></select></div>
+    <div class="fg"><label class="fl">PPT Slide #</label><input id="sf_ppt" value="${esc(s.ppt_slide||'')}" placeholder="empty = Excel only"></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Query Type</label><select id="sf_qtype" onchange="updateQvalHint()">${qtypes.map(q=>`<option ${q===s.query_type?'selected':''}>${q}</option>`).join('')}</select></div>
+    <div class="fg"><label class="fl">Enabled</label><select id="sf_enabled"><option ${s.enabled!=='false'?'selected':''}>true</option><option ${s.enabled==='false'?'selected':''}>false</option></select></div></div>
+    <div class="fg"><label class="fl">Query Value <span id="sf_qhint" style="font-weight:400;text-transform:none"></span></label><input id="sf_qval" value="${esc(s.query_value||'')}" style="font-family:monospace"></div>
+    <div class="doc" style="margin-top:8px;font-size:11px"><strong>Query type guide:</strong><br>
+    <code>base</code> = just the base query, leave value empty<br>
+    <code>filter</code> = base query AND value (e.g. <code>app:RDP</code>)<br>
+    <code>domains</code> = value is a filename in domains/ (e.g. <code>ai_services.txt</code>)<br>
+    <code>tlds</code> = value is space-separated TLDs (e.g. <code>kp ru cu by</code>)<br>
+    <code>raw</code> = value is the full query (base NOT prepended)</div>
+    <div class="btn-group"><button class="btn btn-p" onclick="saveSearchForm(${idx})">Save</button>
+    ${!isNew?`<button class="btn btn-d" onclick="deleteSearchRow(${idx})">Delete</button>`:''}
+    <button class="btn btn-s" onclick="closeEditor()">Cancel</button></div>`;
+  el.style.display='flex';
+  updateQvalHint();
 }
 
-function editSearchRow(idx){editRawCSV();}
+function updateQvalHint(){
+  const qt=document.getElementById('sf_qtype').value;
+  const hints={base:'(leave empty)',filter:'e.g. app:RDP or ruleName:*SSH*',domains:'e.g. ai_services.txt',tlds:'e.g. kp ru cu by sy ir',raw:'full TMV1 query'};
+  document.getElementById('sf_qhint').textContent='— '+hints[qt];
+}
+
+async function saveSearchForm(idx){
+  const row=[document.getElementById('sf_cat').value,
+    '"'+document.getElementById('sf_name').value.replace(/"/g,'""')+'"',
+    '"'+document.getElementById('sf_desc').value.replace(/"/g,'""')+'"',
+    document.getElementById('sf_sort').value,
+    document.getElementById('sf_log').value,
+    document.getElementById('sf_ppt').value,
+    document.getElementById('sf_enabled').value,
+    document.getElementById('sf_qtype').value,
+    '"'+document.getElementById('sf_qval').value.replace(/"/g,'""')+'"'].join(',');
+  if(!document.getElementById('sf_name').value.trim()){toast('Name is required','err');return;}
+  try{
+    const r=await fetch('/api/searches/raw');const csv=await r.text();
+    const lines=csv.split('\\n');
+    // Find data lines (skip comments and header)
+    const dataLines=[];const otherLines=[];
+    lines.forEach((l,i)=>{if(i===0||l.trim().startsWith('#')||!l.trim())otherLines.push({i,l});else dataLines.push({i,l});});
+    if(idx>=0&&idx<dataLines.length){dataLines[idx].l=row;}else{dataLines.push({i:lines.length,l:row});}
+    // Rebuild
+    const all=[];otherLines.forEach(o=>all[o.i]=o.l);dataLines.forEach((d,di)=>{let pos=d.i;while(all[pos]!==undefined)pos++;all[pos]=d.l;});
+    const rebuilt=lines[0]+'\\n'+lines.slice(1).filter(l=>l.trim().startsWith('#')).join('\\n')+(lines.slice(1).some(l=>l.trim().startsWith('#'))?'\\n':'')+dataLines.map(d=>d.l).join('\\n')+'\\n';
+    // Actually simpler: rebuild from scratch
+    const header=lines[0];
+    const comments=lines.filter(l=>l.trim().startsWith('#'));
+    const data=dataLines.map(d=>d.l);
+    const final=[header,...comments,...data].join('\\n')+'\\n';
+    await fetch('/api/searches/raw',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:final})});
+    toast('Search saved!','ok');closeEditor();loadManage();loadSearches();
+  }catch(e){toast('Failed: '+e.message,'err');}
+}
+
+async function deleteSearchRow(idx){
+  if(!confirm('Delete this search?'))return;
+  try{
+    const r=await fetch('/api/searches/raw');const csv=await r.text();
+    const lines=csv.split('\\n');
+    const dataLines=lines.filter(l=>!l.trim().startsWith('#')&&l.trim()&&l.includes(','));
+    if(idx>=0&&idx<dataLines.length-1){dataLines.splice(idx+1,1);}// +1 because header is [0]
+    const comments=lines.filter(l=>l.trim().startsWith('#'));
+    const final=[dataLines[0],...comments,...dataLines.slice(1)].join('\\n')+'\\n';
+    await fetch('/api/searches/raw',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:final})});
+    toast('Search deleted','ok');closeEditor();loadManage();loadSearches();
+  }catch(e){toast('Failed: '+e.message,'err');}
+}
 
 // ═══ SESSIONS ═══
 async function loadSessions(){
