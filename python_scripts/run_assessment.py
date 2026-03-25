@@ -160,9 +160,13 @@ class VisionOneClient:
 
         results: List[Dict[str, Any]] = []
         next_link: Optional[str] = None
+        progress_rate = 0
+        page = 0
 
         while True:
-            if not next_link or not next_link.startswith("http"):
+            page += 1
+            if not next_link:
+                # First request
                 params: Dict[str, Any] = {
                     "startDateTime": start_time,
                     "endDateTime": end_time,
@@ -170,10 +174,9 @@ class VisionOneClient:
                 }
                 if select:
                     params["select"] = select
-                if next_link:
-                    params["nextPageToken"] = next_link
                 request_url = url
             else:
+                # Follow nextLink (contains skipToken)
                 params = {}
                 request_url = next_link
 
@@ -187,7 +190,7 @@ class VisionOneClient:
                     time.sleep(wait)
                     continue
             except requests.exceptions.RequestException as exc:
-                logger.error("Request failed: %s", exc)
+                logger.error("Request failed (page %d): %s", page, exc)
                 break
 
             if resp.status_code == 200:
@@ -195,19 +198,36 @@ class VisionOneClient:
                 items = body.get("items", [])
                 if items:
                     results.extend(items)
-                next_link = body.get("nextPageToken") or body.get("nextLink")
-                if not next_link:
+                progress_rate = body.get("progressRate", 100)
+                next_link = body.get("nextLink")
+
+                # Done when no nextLink AND progressRate is 100
+                if not next_link and progress_rate >= 100:
                     break
+                # Safety: if no nextLink but progressRate < 100, wait and retry
+                if not next_link and progress_rate < 100:
+                    logger.info(
+                        "progressRate=%d, waiting for more data...", progress_rate
+                    )
+                    time.sleep(2)
+                    # Re-request from the beginning (API may have more data now)
+                    next_link = None
+                    continue
             elif resp.status_code == 400 and select:
-                # select parameter not supported for this query - retry without it
-                logger.warning("select=%s returned 400, retrying without select", select)
+                logger.warning("select=%s returned 400, retrying without", select)
                 select = None
+                next_link = None
                 continue
             else:
                 logger.error(
                     "API error: %s returned %d - %s",
                     log_type, resp.status_code, resp.text[:500],
                 )
+                break
+
+            # Safety limit
+            if page > 100:
+                logger.warning("Hit 100-page safety limit")
                 break
 
         return results
