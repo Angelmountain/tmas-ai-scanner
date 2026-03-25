@@ -268,15 +268,12 @@ class VisionOneClient:
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
 
-        # Chunk size: 1h for short windows (<=48h), 3h for medium, 6h for long
-        # Smaller chunks = less data truncation per chunk = more complete results
-        if duration_hours <= 48:
-            chunk_hours = 1
-        elif duration_hours <= 168:
-            chunk_hours = 3
-        else:
-            chunk_hours = 6
-        num_chunks = max(1, int(duration_hours / chunk_hours) + 1)
+        # 30-min chunks for complete data coverage.
+        # The V1 API has a hard 10K record limit per query. With 100K+ records
+        # per 24h, we need small chunks so each stays under 10K.
+        # 30 min = ~2K records per chunk (well under 10K) = ALL data captured.
+        chunk_minutes = 30
+        num_chunks = max(1, int(duration_hours * 60 / chunk_minutes) + 1)
 
         counts: Dict[str, int] = {}
         total_records = 0
@@ -284,13 +281,13 @@ class VisionOneClient:
         for lt in log_types:
             sel = select if lt == "network" else None
             logger.info(
-                "Searching %s | %d chunks of %dh | select=%s | agg=%s | query: %s",
-                lt, num_chunks, chunk_hours, sel, api_field, (query or "")[:80],
+                "Searching %s | %d chunks of %dmin | select=%s | agg=%s | query: %s",
+                lt, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
             )
 
             chunk_start = start_dt
             for chunk_idx in range(num_chunks):
-                chunk_end = min(chunk_start + timedelta(hours=chunk_hours), end_dt)
+                chunk_end = min(chunk_start + timedelta(minutes=chunk_minutes), end_dt)
                 if chunk_start >= end_dt:
                     break
 
