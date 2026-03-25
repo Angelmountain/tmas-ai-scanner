@@ -261,8 +261,8 @@ class VisionOneClient:
         sf_lower = (sorting_field or "").strip().lower()
         api_field = _FIELD_NAME_MAP.get(sf_lower, (sorting_field or "").strip())
 
-        # Build select parameter for network searches
-        select = api_field if (api_field and log_type == "network") else None
+        # Build select parameter for network searches (also used when log_type=everything)
+        select = api_field if api_field else None
 
         start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
