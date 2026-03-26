@@ -370,14 +370,18 @@ class VisionOneClient:
                 count_est = 0
                 logger.warning("countOnly probe for %s failed: %s", lt, exc)
 
-            # Skip endpoints with no data
-            if count_est == 0:
+            # If countOnly failed (timeout) or returned 0, don't skip network/detections
+            # - they're the primary data sources and countOnly itself can timeout
+            CORE_ENDPOINTS = {"network", "detections"}
+            if count_est == 0 and lt not in CORE_ENDPOINTS:
                 logger.info("Skipping %s: 0 records (countOnly)", lt)
                 continue
+            if count_est == 0 and lt in CORE_ENDPOINTS:
+                # Assume dense data if countOnly failed on core endpoint
+                count_est = 100000
+                logger.info("countOnly failed/0 for %s, assuming %d records", lt, count_est)
 
             # Pick chunk size based on density
-            # Goal: keep each chunk under 10K records
-            # With select, records are tiny so API returns more per 10K
             records_per_hour = count_est / max(duration_hours, 1)
             if records_per_hour > 2000:
                 chunk_minutes = 15  # Dense (>2K/hr): 15 min chunks
