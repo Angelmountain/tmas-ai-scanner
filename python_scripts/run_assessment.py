@@ -285,21 +285,59 @@ class VisionOneClient:
         end_dt = datetime.strptime(end_time, "%Y-%m-%dT%H:%M:%SZ")
         duration_hours = (end_dt - start_dt).total_seconds() / 3600
 
-        # 30-min chunks for complete data coverage.
-        # The V1 API has a hard 10K record limit per query. With 100K+ records
-        # per 24h, we need small chunks so each stays under 10K.
-        # 30 min = ~2K records per chunk (well under 10K) = ALL data captured.
-        chunk_minutes = 30
-        num_chunks = max(1, int(duration_hours * 60 / chunk_minutes) + 1)
-
         counts: Dict[str, int] = {}
         total_records = 0
 
         for lt in log_types:
-            # select works on all search endpoints per API spec
             sel = select
+
+            # Smart chunk sizing per endpoint:
+            # - Use countOnly to check if endpoint has data first (1 fast call)
+            # - Then pick chunk size based on data volume
+            probe_url = f"{self.base_url}{self.ENDPOINTS[lt]}"
+            probe_headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+            if query:
+                probe_headers["TMV1-Query"] = query.strip()
+            try:
+                probe = self.session.get(
+                    probe_url,
+                    params={"startDateTime": start_time, "endDateTime": end_time, "mode": "countOnly"},
+                    headers=probe_headers,
+                    timeout=30,
+                )
+                if probe.status_code == 200:
+                    count_est = probe.json().get("totalCount", 0)
+                else:
+                    count_est = 0
+            except Exception:
+                count_est = 0
+
+            # Skip endpoints with no data
+            if count_est == 0:
+                logger.info("Skipping %s: 0 records (countOnly)", lt)
+                continue
+
+            # Pick chunk size based on density
+            # Goal: keep each chunk under 10K records
+            # With select, records are tiny so API returns more per 10K
+            records_per_hour = count_est / max(duration_hours, 1)
+            if records_per_hour > 10000:
+                chunk_minutes = 15  # Very dense: 15 min
+            elif records_per_hour > 3000:
+                chunk_minutes = 30  # Dense: 30 min
+            elif records_per_hour > 500:
+                chunk_minutes = 120  # Medium: 2 hours
+            else:
+                chunk_minutes = 360  # Sparse: 6 hours
+
+            num_chunks = max(1, int(duration_hours * 60 / chunk_minutes) + 1)
+
             logger.info(
-                "Searching %s | %d chunks of %dmin | select=%s | agg=%s | query: %s",
+                "Searching %s | ~%d records | %d chunks of %dmin | select=%s | agg=%s | query: %s",
+                lt, count_est, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
                 lt, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
             )
 
