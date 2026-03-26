@@ -160,8 +160,8 @@ function addHistoryEntry(entry) {
 function spawnPython(scriptPath, args, env, jobId, onProgress, timeoutMs = 7200000) {
   return new Promise((resolve, reject) => {
     const job = jobs.get(jobId);
-    const proc = spawn('python3', [scriptPath, ...args], {
-      env: { ...process.env, ...env },
+    const proc = spawn('python3', ['-u', scriptPath, ...args], {
+      env: { ...process.env, PYTHONUNBUFFERED: '1', ...env },
       cwd: path.join(__dirname, '..'),
     });
 
