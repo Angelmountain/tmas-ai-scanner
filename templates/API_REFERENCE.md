@@ -110,3 +110,25 @@ Response:
 - 15-min time chunks for dense data (>2K records/hour)
 - `select` parameter reduces response size but not server processing time
 - `mode=countOnly` is fast (no data processing) - use for probes
+
+## Error Codes Reference
+
+| Problem | HTTP Code | Error Code | Cause |
+|---------|-----------|------------|-------|
+| Invalid token | 401 | `InvalidCredentials` / `InvalidToken` | Wrong or expired API key |
+| No permissions | 403 | `AccessDenied` | API key role lacks permissions for this endpoint |
+| Not found | 404 | `NotFound` | Resource doesn't exist |
+| Rate limited | 429 | - | Too many requests in 60s window |
+| Body too large | 413 | - | Request body > 1MB |
+| Server timeout | 504/599 | `OtherModuleError` / `timeout of 55000ms exceeded` | Query processing > 60s |
+
+## Troubleshooting Guide
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| 599 timeout on search | Query too broad or `top` too high | Use `top=1000`, smaller time chunks (15 min) |
+| 429 Too Many Requests | Hitting rate limit | Add 0.5-1s delay between calls |
+| 0 results from endpointActivities | Using NDR productCode filter | Use `productCode:xes` or `productCode:*` for EDR data |
+| suid field empty in most records | suid is sparse in network data | Use time chunking to scan more records; also check detections + endpoint endpoints |
+| countOnly shows 100K but fetch gets 10K | API hard limit per query window | Use time chunking (15-30 min windows) |
+| `field:*` doesn't filter | Matches schema existence, not value | Don't use `field:*` as a filter; use time chunking instead |
