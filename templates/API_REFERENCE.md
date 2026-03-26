@@ -96,3 +96,17 @@ Response:
 - **`field:*` does NOT filter to non-empty values** - it matches all records where the field exists in schema
 - **Must use time chunking** to get complete data across large time windows
 - **`countOnly` mode** can tell you how many records exist without fetching them
+
+## API Rate Limits
+
+- **Rate limit**: Max requests per 60 seconds. Exceeding returns **429 Too Many Requests**.
+- **Request body**: Max 1 MB. Exceeding returns **413**.
+- **Request timeout**: **60 seconds**. If processing takes longer, returns **504** (or 599 from some endpoints).
+
+### Implications for our tool
+
+- `top=1000` keeps page processing under 60s (was 5000 which caused timeouts)
+- 0.5s delay between requests to stay under rate limit
+- 15-min time chunks for dense data (>2K records/hour)
+- `select` parameter reduces response size but not server processing time
+- `mode=countOnly` is fast (no data processing) - use for probes
