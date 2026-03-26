@@ -120,6 +120,12 @@ class VisionOneClient:
     ENDPOINTS = {
         "network": "/v3.0/search/networkActivities",
         "detections": "/v3.0/search/detections",
+        "endpoint": "/v3.0/search/endpointActivities",
+        "email": "/v3.0/search/emailActivities",
+        "cloud": "/v3.0/search/cloudActivities",
+        "identity": "/v3.0/search/identityActivities",
+        "container": "/v3.0/search/containerActivities",
+        "mobile": "/v3.0/search/mobileActivities",
     }
 
     def __init__(self, api_key: str, base_url: str) -> None:
@@ -249,13 +255,16 @@ class VisionOneClient:
 
         Returns (counts_dict, total_records_seen).
         """
-        if log_type not in ("network", "detections", "everything"):
-            logger.error("Invalid log type '%s'.", log_type)
+        valid_types = set(self.ENDPOINTS.keys()) | {"everything"}
+        if log_type not in valid_types:
+            logger.error("Invalid log type '%s'. Valid: %s", log_type, valid_types)
             return {}, 0
 
-        log_types = (
-            ["network", "detections"] if log_type == "everything" else [log_type]
-        )
+        if log_type == "everything":
+            # Query ALL available endpoints (matches console "all" mode)
+            log_types = list(self.ENDPOINTS.keys())
+        else:
+            log_types = [log_type]
 
         # Resolve the API field name for aggregation
         sf_lower = (sorting_field or "").strip().lower()
@@ -279,7 +288,8 @@ class VisionOneClient:
         total_records = 0
 
         for lt in log_types:
-            sel = select if lt == "network" else None
+            # select works on all search endpoints per API spec
+            sel = select
             logger.info(
                 "Searching %s | %d chunks of %dmin | select=%s | agg=%s | query: %s",
                 lt, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
