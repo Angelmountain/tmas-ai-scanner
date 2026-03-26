@@ -114,9 +114,9 @@ def _build_session() -> requests.Session:
     # server's 60-second timeout. Blindly retrying the same request wastes time.
     # We handle 504/599/408 explicitly in _search_chunk.
     retry = Retry(
-        total=3,
-        backoff_factor=1.0,
-        status_forcelist=[429, 500, 502, 503],
+        total=0,             # No auto-retry (we handle timeouts in _search_chunk)
+        backoff_factor=0,
+        status_forcelist=[],  # Handle all status codes ourselves
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
