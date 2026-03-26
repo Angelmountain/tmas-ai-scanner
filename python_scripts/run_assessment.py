@@ -100,10 +100,13 @@ def emit_complete(
 # ---------------------------------------------------------------------------
 def _build_session() -> requests.Session:
     session = requests.Session()
+    # 504 is NOT in status_forcelist: it means the query is too heavy for the
+    # server's 60-second timeout. Blindly retrying the same request wastes time.
+    # We handle 504/599/408 explicitly in _search_chunk.
     retry = Retry(
         total=3,
-        backoff_factor=0.5,
-        status_forcelist=[429, 500, 502, 503, 504],
+        backoff_factor=1.0,
+        status_forcelist=[429, 500, 502, 503],
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
@@ -166,8 +169,8 @@ class VisionOneClient:
 
         results: List[Dict[str, Any]] = []
         next_link: Optional[str] = None
-        progress_rate = 0
         page = 0
+        progress_stall_count = 0  # Track consecutive progressRate < 100 with no nextLink
 
         while True:
             page += 1
@@ -188,13 +191,16 @@ class VisionOneClient:
 
             try:
                 resp = self.session.get(
-                    request_url, params=params, headers=headers, timeout=120
+                    request_url, params=params, headers=headers, timeout=90
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 60))
-                    logger.warning("Rate-limited. Sleeping %ds ...", wait)
+                    logger.warning("Rate-limited (429). Sleeping %ds ...", wait)
                     time.sleep(wait)
                     continue
+            except requests.exceptions.ReadTimeout:
+                logger.warning("Client read timeout on page %d, keeping %d partial results", page, len(results))
+                break
             except requests.exceptions.RequestException as exc:
                 logger.error("Request failed (page %d): %s", page, exc)
                 break
@@ -215,15 +221,24 @@ class VisionOneClient:
                 # Done when no nextLink AND progressRate is 100
                 if not next_link and progress_rate >= 100:
                     break
-                # Safety: if no nextLink but progressRate < 100, wait and retry
+                # If no nextLink but progressRate < 100, server is still
+                # processing. Wait briefly, but cap retries to avoid infinite loop.
                 if not next_link and progress_rate < 100:
+                    progress_stall_count += 1
+                    if progress_stall_count > 5:
+                        logger.warning(
+                            "progressRate stuck at %d after %d retries, keeping %d results",
+                            progress_rate, progress_stall_count, len(results),
+                        )
+                        break
                     logger.info(
-                        "progressRate=%d, waiting for more data...", progress_rate
+                        "progressRate=%d (attempt %d/5), waiting 3s...",
+                        progress_rate, progress_stall_count,
                     )
-                    time.sleep(2)
-                    # Re-request from the beginning (API may have more data now)
-                    next_link = None
+                    time.sleep(3)
                     continue
+                # Reset stall counter on successful pagination
+                progress_stall_count = 0
             elif resp.status_code == 400 and select:
                 logger.warning("select=%s returned 400, retrying without", select)
                 select = None
@@ -238,8 +253,11 @@ class VisionOneClient:
 
             # Safety limit
             if page > 100:
-                logger.warning("Hit 100-page safety limit")
+                logger.warning("Hit 100-page safety limit (%d results)", len(results))
                 break
+
+            # Small delay between pages to avoid rapid-fire requests
+            time.sleep(0.3)
 
         return results
 
@@ -303,12 +321,20 @@ class VisionOneClient:
             # Adapt query for non-NDR endpoints:
             # NDR base query (productCode:pdi OR productCode:xns) returns 0 on
             # endpoint/email/cloud/identity because they use different product codes.
-            # Replace with productCode:* for those endpoints.
+            # Per API docs, productCode:* matches all records where the field exists
+            # in the schema (i.e., it's a no-op), so strip the filter entirely.
             NDR_ENDPOINTS = {"network", "detections"}
             if lt not in NDR_ENDPOINTS and query and "productCode:" in query:
                 ep_query = query.replace(
-                    "(productCode:pdi OR productCode:xns)", "productCode:*"
-                )
+                    "(productCode:pdi OR productCode:xns)", ""
+                ).strip()
+                # Clean up dangling AND/OR
+                if ep_query.startswith("AND "):
+                    ep_query = ep_query[4:].strip()
+                if ep_query.endswith(" AND"):
+                    ep_query = ep_query[:-4].strip()
+                if not ep_query:
+                    ep_query = None
             else:
                 ep_query = query
 
@@ -329,8 +355,10 @@ class VisionOneClient:
                     count_est = probe.json().get("totalCount", 0)
                 else:
                     count_est = 0
-            except Exception:
+                    logger.warning("countOnly probe for %s returned %d", lt, probe.status_code)
+            except Exception as exc:
                 count_est = 0
+                logger.warning("countOnly probe for %s failed: %s", lt, exc)
 
             # Skip endpoints with no data
             if count_est == 0:
@@ -412,6 +440,7 @@ _AGGREGATION_RULES: Dict[Tuple[str, str], Tuple[str, str, str]] = {
     # Core network
     ("network detections", "rulename"): ("Rule Name", "Occurrences", "ruleName"),
     ("top accounts used", "suid"): ("Account Name", "Usage Count", "suid"),
+    ("top accounts", "suid"): ("Account Name", "Usage Count", "suid"),
     ("server ports used", "serverport"): ("Server Port", "Connection Count", "serverPort"),
     ("unsuccessful logon", "rulename"): ("Rule Name", "Failed Logon Attempts", "ruleName"),
     ("top file used", "filename"): ("File Name", "Access Count", "fileName"),
