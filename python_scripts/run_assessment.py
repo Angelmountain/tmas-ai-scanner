@@ -199,6 +199,11 @@ class VisionOneClient:
                 logger.error("Request failed (page %d): %s", page, exc)
                 break
 
+            if resp.status_code == 599:
+                # Server-side timeout - skip this chunk, don't retry
+                logger.warning("Server timeout (599) on page %d, skipping chunk", page)
+                break
+
             if resp.status_code == 200:
                 body = resp.json()
                 items = body.get("items", [])
@@ -336,12 +341,12 @@ class VisionOneClient:
             # Goal: keep each chunk under 10K records
             # With select, records are tiny so API returns more per 10K
             records_per_hour = count_est / max(duration_hours, 1)
-            if records_per_hour > 10000:
-                chunk_minutes = 15  # Very dense: 15 min
-            elif records_per_hour > 3000:
-                chunk_minutes = 30  # Dense: 30 min
+            if records_per_hour > 2000:
+                chunk_minutes = 15  # Dense (>2K/hr): 15 min chunks
             elif records_per_hour > 500:
-                chunk_minutes = 120  # Medium: 2 hours
+                chunk_minutes = 60  # Medium: 1 hour
+            elif records_per_hour > 100:
+                chunk_minutes = 180  # Light: 3 hours
             else:
                 chunk_minutes = 360  # Sparse: 6 hours
 
