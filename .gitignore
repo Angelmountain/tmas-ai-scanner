@@ -31,3 +31,12 @@ tmas
 # Claude Code local config (not project code)
 .claude/skills/
 .claude/settings.local.json
+
+# Agent runtime memory (generated data, not code)
+.claude/memory/*/*.json
+.claude/memory/*/*.md
+!.claude/memory/*/.gitkeep
+
+# Report outputs (generated, not source)
+reports/output/*
+!reports/output/.gitkeep
