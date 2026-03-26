@@ -36,6 +36,16 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 # ---------------------------------------------------------------------------
+# Force unbuffered output so Node.js parent process receives lines immediately.
+# Without this, piped stdout/stderr use 8KB block buffering and the Node.js
+# backend may never see JSON progress lines or log output.
+# ---------------------------------------------------------------------------
+if not sys.stdout.line_buffering:
+    sys.stdout.reconfigure(line_buffering=True)
+if not sys.stderr.line_buffering:
+    sys.stderr.reconfigure(line_buffering=True)
+
+# ---------------------------------------------------------------------------
 # Logging - all log output goes to stderr so stdout stays clean for JSON lines
 # ---------------------------------------------------------------------------
 _log_handler = logging.StreamHandler(sys.stderr)
