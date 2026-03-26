@@ -49,7 +49,7 @@ logger = logging.getLogger("run_assessment")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PAGE_SIZE = 5000  # Maximum records per API page
+PAGE_SIZE = 1000  # Records per page (lower = faster server response, avoids 599 timeouts)
 MAX_WORKERS = 1   # Sequential execution (prevents OOM from parallel fetches)
 
 # Thread-safe lock for writing JSON lines to stdout
@@ -188,7 +188,7 @@ class VisionOneClient:
 
             try:
                 resp = self.session.get(
-                    request_url, params=params, headers=headers, timeout=60
+                    request_url, params=params, headers=headers, timeout=120
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 60))
@@ -393,7 +393,7 @@ class VisionOneClient:
                 # items go out of scope here - memory freed
 
                 chunk_start = chunk_end
-                time.sleep(0.1)
+                time.sleep(0.5)
 
             logger.info(
                 "Completed %s search. %d records, %d unique values from %d chunks.",
