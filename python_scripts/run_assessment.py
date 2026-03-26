@@ -278,8 +278,15 @@ class VisionOneClient:
                         page -= 1  # Don't count the failed attempt
                         time.sleep(1)
                         continue
-                # All top values exhausted or mid-pagination - signal caller to split
-                logger.warning("All top values exhausted. Signaling chunk split.")
+                # Mid-pagination timeout: keep partial data we already got
+                if results:
+                    logger.info(
+                        "Timeout mid-pagination (page %d), keeping %d partial results",
+                        page, len(results),
+                    )
+                    return results, False  # Not a full timeout - we have data
+                # First page timeout with all top values exhausted - signal split
+                logger.warning("First-page timeout, signaling chunk split.")
                 return results, True
 
             if resp.status_code == 200:
