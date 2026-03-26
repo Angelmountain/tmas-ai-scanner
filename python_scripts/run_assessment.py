@@ -295,12 +295,24 @@ class VisionOneClient:
             # - Use countOnly to check if endpoint has data first (1 fast call)
             # - Then pick chunk size based on data volume
             probe_url = f"{self.base_url}{self.ENDPOINTS[lt]}"
+            # Adapt query for non-NDR endpoints:
+            # NDR base query (productCode:pdi OR productCode:xns) returns 0 on
+            # endpoint/email/cloud/identity because they use different product codes.
+            # Replace with productCode:* for those endpoints.
+            NDR_ENDPOINTS = {"network", "detections"}
+            if lt not in NDR_ENDPOINTS and query and "productCode:" in query:
+                ep_query = query.replace(
+                    "(productCode:pdi OR productCode:xns)", "productCode:*"
+                )
+            else:
+                ep_query = query
+
             probe_headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
             }
-            if query:
-                probe_headers["TMV1-Query"] = query.strip()
+            if ep_query:
+                probe_headers["TMV1-Query"] = ep_query.strip()
             try:
                 probe = self.session.get(
                     probe_url,
@@ -337,8 +349,7 @@ class VisionOneClient:
 
             logger.info(
                 "Searching %s | ~%d records | %d chunks of %dmin | select=%s | agg=%s | query: %s",
-                lt, count_est, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
-                lt, num_chunks, chunk_minutes, sel, api_field, (query or "")[:80],
+                lt, count_est, num_chunks, chunk_minutes, sel, api_field, (ep_query or "")[:80],
             )
 
             chunk_start = start_dt
@@ -350,14 +361,24 @@ class VisionOneClient:
                 cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
                 ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                items = self._search_chunk(lt, cs, ce, query=query, select=sel)
+                items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
                 chunk_count = len(items)
                 total_records += chunk_count
 
                 # Aggregate on the fly - count by field, discard raw data
+                # For user fields, also check alternate field names across endpoints
+                # (networkActivities uses 'suid', endpointActivities uses 'logonUser')
+                alt_fields = []
+                if api_field == "suid":
+                    alt_fields = ["logonUser", "objectUser"]
                 if api_field and items:
                     for item in items:
                         val = item.get(api_field)
+                        if not val:
+                            for af in alt_fields:
+                                val = item.get(af)
+                                if val:
+                                    break
                         if val:
                             counts[val] = counts.get(val, 0) + 1
                 elif items:
