@@ -49,11 +49,8 @@ logger = logging.getLogger("run_assessment")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PAGE_SIZE = 500   # Default records per page (safe for most queries; API enum: 50/100/500/1000/5000)
-VALID_TOP_VALUES = [50, 100, 500, 1000, 5000]  # API-enforced enum
+PAGE_SIZE = 1000  # Records per page (lower = faster server response, avoids 599 timeouts)
 MAX_WORKERS = 1   # Sequential execution (prevents OOM from parallel fetches)
-MAX_REQUESTS_PER_MINUTE = 50  # Stay under rate limit (actual limit varies by tenant)
-TIMEOUT_TOP_FALLBACKS = [500, 100, 50]  # Progressively smaller page sizes on timeout
 
 # Thread-safe lock for writing JSON lines to stdout
 _stdout_lock = threading.Lock()
@@ -103,37 +100,15 @@ def emit_complete(
 # ---------------------------------------------------------------------------
 def _build_session() -> requests.Session:
     session = requests.Session()
-    # NOTE: 504/599 are NOT in status_forcelist because those indicate the query
-    # is too heavy for the server. Blindly retrying the same request wastes time.
-    # We handle 504/599 explicitly with smaller top/chunk logic.
     retry = Retry(
         total=3,
-        backoff_factor=1.0,
-        status_forcelist=[429, 500, 502, 503],
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
-
-
-def _validate_top(value: int) -> int:
-    """Return the closest valid `top` value from the API enum."""
-    if value in VALID_TOP_VALUES:
-        return value
-    # Pick the largest valid value that is <= requested
-    candidates = [v for v in VALID_TOP_VALUES if v <= value]
-    if candidates:
-        return max(candidates)
-    return VALID_TOP_VALUES[0]  # 50
-
-
-def _next_smaller_top(current: int) -> Optional[int]:
-    """Return the next smaller valid top value, or None if already at minimum."""
-    for val in TIMEOUT_TOP_FALLBACKS:
-        if val < current:
-            return val
-    return None
 
 
 # ---------------------------------------------------------------------------
@@ -171,28 +146,6 @@ class VisionOneClient:
             return "detections"
         return "network"
 
-    # ----- rate limit tracking -----
-    _request_timestamps: List[float] = []
-    _rate_lock = threading.Lock()
-
-    def _rate_limit_wait(self) -> None:
-        """Block until we can safely make another request within rate limits."""
-        with self._rate_lock:
-            now = time.time()
-            cutoff = now - 60.0
-            # Purge timestamps older than 60s
-            self._request_timestamps = [
-                t for t in self._request_timestamps if t > cutoff
-            ]
-            if len(self._request_timestamps) >= MAX_REQUESTS_PER_MINUTE:
-                oldest = self._request_timestamps[0]
-                wait_time = 60.0 - (now - oldest) + 0.5
-                if wait_time > 0:
-                    logger.info("Rate limit: %d reqs in last 60s, sleeping %.1fs",
-                                len(self._request_timestamps), wait_time)
-                    time.sleep(wait_time)
-            self._request_timestamps.append(time.time())
-
     # ----- single chunk search (paginated, up to API limit) -----
     def _search_chunk(
         self,
@@ -201,13 +154,8 @@ class VisionOneClient:
         end_time: str,
         query: Optional[str] = None,
         select: Optional[str] = None,
-        top: Optional[int] = None,
-    ) -> Tuple[List[Dict[str, Any]], bool]:
-        """Search a single time chunk with pagination.
-
-        Returns (items, timed_out). timed_out=True means the server returned
-        408/504/599 even at the smallest page size - caller should split the chunk.
-        """
+    ) -> List[Dict[str, Any]]:
+        """Search a single time chunk with pagination."""
         url = f"{self.base_url}{self.ENDPOINTS[log_type]}"
         headers: Dict[str, str] = {
             "Authorization": f"Bearer {self.api_key}",
@@ -216,78 +164,45 @@ class VisionOneClient:
         if query:
             headers["TMV1-Query"] = query.strip()
 
-        current_top = _validate_top(top or PAGE_SIZE)
         results: List[Dict[str, Any]] = []
         next_link: Optional[str] = None
+        progress_rate = 0
         page = 0
-        progress_stall_count = 0  # Track consecutive progressRate < 100 with no nextLink
 
         while True:
             page += 1
-            self._rate_limit_wait()
-
             if not next_link:
-                # First request (or re-request after retry)
+                # First request
                 params: Dict[str, Any] = {
                     "startDateTime": start_time,
                     "endDateTime": end_time,
-                    "top": current_top,
+                    "top": PAGE_SIZE,
                 }
                 if select:
                     params["select"] = select
                 request_url = url
             else:
-                # Follow nextLink (contains skipToken and original params)
+                # Follow nextLink (contains skipToken)
                 params = {}
                 request_url = next_link
 
             try:
                 resp = self.session.get(
-                    request_url, params=params, headers=headers, timeout=90
+                    request_url, params=params, headers=headers, timeout=120
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 60))
-                    logger.warning("Rate-limited (429). Sleeping %ds ...", wait)
+                    logger.warning("Rate-limited. Sleeping %ds ...", wait)
                     time.sleep(wait)
                     continue
-            except requests.exceptions.ReadTimeout:
-                logger.warning("Client read timeout on page %d (top=%d)", page, current_top)
-                # Treat like server timeout - try smaller top
-                smaller = _next_smaller_top(current_top)
-                if smaller and not next_link:
-                    logger.info("Retrying with top=%d (was %d)", smaller, current_top)
-                    current_top = smaller
-                    continue
-                return results, True
             except requests.exceptions.RequestException as exc:
                 logger.error("Request failed (page %d): %s", page, exc)
                 break
 
-            # Handle server-side timeouts: 408, 504, 599
             if resp.status_code in (408, 504, 599):
-                logger.warning(
-                    "Server timeout (%d) on page %d with top=%d",
-                    resp.status_code, page, current_top,
-                )
-                # Try smaller page size (only for first page - nextLink pages can't change top)
-                if not next_link:
-                    smaller = _next_smaller_top(current_top)
-                    if smaller:
-                        logger.info("Retrying with top=%d (was %d)", smaller, current_top)
-                        current_top = smaller
-                        page -= 1  # Don't count the failed attempt
-                        time.sleep(1)
-                        continue
-                # Mid-pagination timeout: keep partial data we already got
-                if results:
-                    logger.info(
-                        "Timeout mid-pagination (page %d), keeping %d partial results",
-                        page, len(results),
-                    )
-                    return results, False  # Not a full timeout - we have data
-                # First page timeout with all top values exhausted - signal split
-                logger.warning("First-page timeout, signaling chunk split.")
-                return results, True
+                # Server-side timeout - keep any partial data, skip rest of chunk
+                logger.warning("Server timeout (%d) on page %d, keeping %d partial results", resp.status_code, page, len(results))
+                break
 
             if resp.status_code == 200:
                 body = resp.json()
@@ -300,25 +215,15 @@ class VisionOneClient:
                 # Done when no nextLink AND progressRate is 100
                 if not next_link and progress_rate >= 100:
                     break
-                # If no nextLink but progressRate < 100, the server is still
-                # processing. Wait briefly, then re-request. But cap retries
-                # to avoid infinite loops.
+                # Safety: if no nextLink but progressRate < 100, wait and retry
                 if not next_link and progress_rate < 100:
-                    progress_stall_count += 1
-                    if progress_stall_count > 5:
-                        logger.warning(
-                            "progressRate stuck at %d after %d retries, moving on with %d results",
-                            progress_rate, progress_stall_count, len(results),
-                        )
-                        break
                     logger.info(
-                        "progressRate=%d (attempt %d/5), waiting 3s...",
-                        progress_rate, progress_stall_count,
+                        "progressRate=%d, waiting for more data...", progress_rate
                     )
-                    time.sleep(3)
+                    time.sleep(2)
+                    # Re-request from the beginning (API may have more data now)
+                    next_link = None
                     continue
-                # Reset stall counter on successful pagination
-                progress_stall_count = 0
             elif resp.status_code == 400 and select:
                 logger.warning("select=%s returned 400, retrying without", select)
                 select = None
@@ -333,13 +238,10 @@ class VisionOneClient:
 
             # Safety limit
             if page > 100:
-                logger.warning("Hit 100-page safety limit (%d results)", len(results))
+                logger.warning("Hit 100-page safety limit")
                 break
 
-            # Small delay between pages to be kind to the API
-            time.sleep(0.3)
-
-        return results, False
+        return results
 
     # ----- streaming aggregation search (no memory limit) -----
     def search_and_aggregate(
@@ -381,10 +283,7 @@ class VisionOneClient:
         sf_lower = (sorting_field or "").strip().lower()
         api_field = _FIELD_NAME_MAP.get(sf_lower, (sorting_field or "").strip())
 
-        # Build select parameter - only include the aggregation field we need.
-        # select reduces response size (faster network transfer) but does NOT
-        # reduce server processing time. It works on all search endpoints per the
-        # OpenAPI spec.
+        # Build select parameter for network searches (also used when log_type=everything)
         select = api_field if api_field else None
 
         start_dt = datetime.strptime(start_time, "%Y-%m-%dT%H:%M:%SZ")
@@ -397,32 +296,22 @@ class VisionOneClient:
         for lt in log_types:
             sel = select
 
+            # Smart chunk sizing per endpoint:
+            # - Use countOnly to check if endpoint has data first (1 fast call)
+            # - Then pick chunk size based on data volume
+            probe_url = f"{self.base_url}{self.ENDPOINTS[lt]}"
             # Adapt query for non-NDR endpoints:
             # NDR base query (productCode:pdi OR productCode:xns) returns 0 on
             # endpoint/email/cloud/identity because they use different product codes.
-            # Remove the NDR productCode filter entirely for those endpoints
-            # (productCode:* matches all records where field exists in schema,
-            # which is the same as no filter at all).
+            # Replace with productCode:* for those endpoints.
             NDR_ENDPOINTS = {"network", "detections"}
             if lt not in NDR_ENDPOINTS and query and "productCode:" in query:
-                # Strip the NDR productCode filter instead of replacing with
-                # productCode:* (which is a no-op per API docs)
                 ep_query = query.replace(
-                    "(productCode:pdi OR productCode:xns)", ""
-                ).strip()
-                # Clean up dangling AND/OR
-                if ep_query.startswith("AND "):
-                    ep_query = ep_query[4:].strip()
-                if ep_query.endswith(" AND"):
-                    ep_query = ep_query[:-4].strip()
-                if not ep_query:
-                    ep_query = None
+                    "(productCode:pdi OR productCode:xns)", "productCode:*"
+                )
             else:
                 ep_query = query
 
-            # Smart chunk sizing: use countOnly probe to estimate volume
-            self._rate_limit_wait()
-            probe_url = f"{self.base_url}{self.ENDPOINTS[lt]}"
             probe_headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
@@ -432,11 +321,7 @@ class VisionOneClient:
             try:
                 probe = self.session.get(
                     probe_url,
-                    params={
-                        "startDateTime": start_time,
-                        "endDateTime": end_time,
-                        "mode": "countOnly",
-                    },
+                    params={"startDateTime": start_time, "endDateTime": end_time, "mode": "countOnly"},
                     headers=probe_headers,
                     timeout=30,
                 )
@@ -444,85 +329,44 @@ class VisionOneClient:
                     count_est = probe.json().get("totalCount", 0)
                 else:
                     count_est = 0
-                    logger.warning("countOnly probe for %s returned %d", lt, probe.status_code)
-            except Exception as exc:
+            except Exception:
                 count_est = 0
-                logger.warning("countOnly probe for %s failed: %s", lt, exc)
 
             # Skip endpoints with no data
             if count_est == 0:
                 logger.info("Skipping %s: 0 records (countOnly)", lt)
                 continue
 
-            # Pick chunk size based on density.
-            # Goal: keep each chunk under ~5K records so the server can process
-            # within its 60-second timeout. Using top=500 as default means
-            # we can paginate up to 10 pages per chunk safely.
+            # Pick chunk size based on density
+            # Goal: keep each chunk under 10K records
+            # With select, records are tiny so API returns more per 10K
             records_per_hour = count_est / max(duration_hours, 1)
-            if records_per_hour > 5000:
-                chunk_minutes = 5    # Very dense (>5K/hr): 5 min chunks
-            elif records_per_hour > 2000:
-                chunk_minutes = 10   # Dense (>2K/hr): 10 min chunks
+            if records_per_hour > 2000:
+                chunk_minutes = 15  # Dense (>2K/hr): 15 min chunks
             elif records_per_hour > 500:
-                chunk_minutes = 30   # Medium: 30 min
+                chunk_minutes = 60  # Medium: 1 hour
             elif records_per_hour > 100:
-                chunk_minutes = 120  # Light: 2 hours
+                chunk_minutes = 180  # Light: 3 hours
             else:
                 chunk_minutes = 360  # Sparse: 6 hours
-
-            # Pick initial top based on density
-            if records_per_hour > 5000:
-                initial_top = 500
-            elif records_per_hour > 1000:
-                initial_top = 500
-            else:
-                initial_top = 1000
 
             num_chunks = max(1, int(duration_hours * 60 / chunk_minutes) + 1)
 
             logger.info(
-                "Searching %s | ~%d records (~%d/hr) | %d chunks of %dmin | top=%d | select=%s | agg=%s | query: %s",
-                lt, count_est, int(records_per_hour), num_chunks, chunk_minutes,
-                initial_top, sel, api_field, (ep_query or "")[:80],
+                "Searching %s | ~%d records | %d chunks of %dmin | select=%s | agg=%s | query: %s",
+                lt, count_est, num_chunks, chunk_minutes, sel, api_field, (ep_query or "")[:80],
             )
 
             chunk_start = start_dt
-            chunk_idx = 0
-            # Use a work queue so we can split chunks dynamically on timeout
-            work_queue: List[Tuple[datetime, datetime]] = []
-            while chunk_start < end_dt:
+            for chunk_idx in range(num_chunks):
                 chunk_end = min(chunk_start + timedelta(minutes=chunk_minutes), end_dt)
-                work_queue.append((chunk_start, chunk_end))
-                chunk_start = chunk_end
+                if chunk_start >= end_dt:
+                    break
 
-            while work_queue:
-                c_start, c_end = work_queue.pop(0)
-                chunk_idx += 1
-                cs = c_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-                ce = c_end.strftime("%Y-%m-%dT%H:%M:%SZ")
+                cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
+                ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                items, timed_out = self._search_chunk(
-                    lt, cs, ce, query=ep_query, select=sel, top=initial_top
-                )
-
-                if timed_out and len(items) == 0:
-                    # Split this chunk into two halves and retry
-                    midpoint = c_start + (c_end - c_start) / 2
-                    # Don't split below 1 minute
-                    if (c_end - c_start).total_seconds() > 120:
-                        logger.info(
-                            "Splitting timed-out chunk [%s..%s] at midpoint %s",
-                            cs, ce, midpoint.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        )
-                        work_queue.insert(0, (midpoint, c_end))
-                        work_queue.insert(0, (c_start, midpoint))
-                        continue
-                    else:
-                        logger.warning(
-                            "Chunk [%s..%s] too small to split, skipping", cs, ce
-                        )
-                        continue
-
+                items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
                 chunk_count = len(items)
                 total_records += chunk_count
 
@@ -547,11 +391,13 @@ class VisionOneClient:
                     counts["(all)"] = counts.get("(all)", 0) + chunk_count
 
                 # items go out of scope here - memory freed
-                time.sleep(0.3)
+
+                chunk_start = chunk_end
+                time.sleep(0.5)
 
             logger.info(
                 "Completed %s search. %d records, %d unique values from %d chunks.",
-                lt, total_records, len(counts), chunk_idx,
+                lt, total_records, len(counts), min(chunk_idx + 1, num_chunks),
             )
 
         return counts, total_records
@@ -566,7 +412,6 @@ _AGGREGATION_RULES: Dict[Tuple[str, str], Tuple[str, str, str]] = {
     # Core network
     ("network detections", "rulename"): ("Rule Name", "Occurrences", "ruleName"),
     ("top accounts used", "suid"): ("Account Name", "Usage Count", "suid"),
-    ("top accounts", "suid"): ("Account Name", "Usage Count", "suid"),
     ("server ports used", "serverport"): ("Server Port", "Connection Count", "serverPort"),
     ("unsuccessful logon", "rulename"): ("Rule Name", "Failed Logon Attempts", "ruleName"),
     ("top file used", "filename"): ("File Name", "Access Count", "fileName"),
