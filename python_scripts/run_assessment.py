@@ -201,7 +201,7 @@ class VisionOneClient:
 
             try:
                 resp = self.session.get(
-                    request_url, params=params, headers=headers, timeout=65
+                    request_url, params=params, headers=headers, timeout=30
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 60))

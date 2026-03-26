@@ -4,7 +4,7 @@ category,name,description,sorting,log_type,ppt_slide,enabled,query_type,query_va
 # These use base query only - aggregation field is sparse across all records
 # ──────────────────────────────────────────────────────────────────────────────
 Network,Network Detections,All detections from both sensors,ruleName,detections,6,true,base,
-Network,Top Accounts,User accounts (RDP/SSH/SMB/Kerberos),suid,network,7,true,filter,app:(RDP OR SSH OR SMB OR Kerberos OR LDAP OR FTP)
+Network,Top Accounts,User accounts across all network data,suid,everything,7,true,base,
 Network,Server Ports,Most used server ports,serverPort,network,8,true,base,
 Network,Unsuccessful Logon,Failed login attempts,ruleName,detections,9,true,filter,ruleName:("*unsuccessful*logon*" OR "*failed*logon*" OR "*logon*fail*")
 Network,Top Files,Most frequently accessed files,fileName,network,,true,base,
