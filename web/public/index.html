@@ -573,14 +573,14 @@ textarea{resize:vertical;min-height:60px}
   <div class="card" id="poc-validate-card">
     <div class="card-hd" onclick="toggleCard(this)">
       <span class="badge info">Step 1</span>
-      <span class="card-title">Search Validation</span>
+      <span class="card-title">Search Validator Agent</span>
       <span id="poc-validate-status" class="badge" style="display:none"></span>
-      <span id="poc-validate-time" style="font-size:11px;color:var(--text3);display:none"></span>
+      <span id="poc-validate-time" class="poc-timing" style="display:none"></span>
       <span class="chevron">&#9656;</span>
     </div>
     <div class="card-bd">
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Tests each search query against the API using <code>countOnly</code> mode to verify it returns data.</p>
-      <button class="btn btn-p btn-sm" id="pocValidateBtn" onclick="pocValidate()">Run Validation</button>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Probes all 39 searches with <code>countOnly</code> to verify API connectivity, query validity, and estimated data volume per search.</p>
+      <button class="btn btn-p btn-sm" id="pocValidateBtn" onclick="pocValidate()">Invoke Search Validator</button>
       <div id="poc-validate-results" style="margin-top:10px"></div>
     </div>
   </div>
@@ -589,39 +589,61 @@ textarea{resize:vertical;min-height:60px}
   <div class="card" id="poc-collect-card">
     <div class="card-hd" onclick="toggleCard(this)">
       <span class="badge info">Step 2</span>
-      <span class="card-title">Data Collection</span>
+      <span class="card-title">Data Collector Agent</span>
       <span id="poc-collect-status" class="badge" style="display:none"></span>
-      <span id="poc-collect-time" style="font-size:11px;color:var(--text3);display:none"></span>
+      <span id="poc-collect-time" class="poc-timing" style="display:none"></span>
       <span class="chevron">&#9656;</span>
     </div>
     <div class="card-bd">
-      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Runs the full assessment with 30-min time chunks to capture all data. Uses streaming aggregation for efficient memory usage.</p>
-      <button class="btn btn-p btn-sm" id="pocCollectBtn" onclick="pocCollect()">Run Collection</button>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Runs the full assessment: 30-min time chunks, streaming aggregation, smart chunk sizing via <code>countOnly</code> probes. Generates Excel + PowerPoint.</p>
+      <button class="btn btn-p btn-sm" id="pocCollectBtn" onclick="pocCollect()">Invoke Data Collector</button>
+      <button class="btn btn-d btn-sm" id="pocCollectStop" onclick="stopJob()" style="display:none">Stop</button>
       <div id="poc-collect-results" style="margin-top:10px"></div>
     </div>
   </div>
 
-  <!-- Step 3: Analyze (shows after collection) -->
-  <div class="card" id="poc-analyze-card" style="display:none">
+  <!-- Step 3: Analyze -->
+  <div class="card" id="poc-analyze-card">
     <div class="card-hd" onclick="toggleCard(this)">
       <span class="badge info">Step 3</span>
-      <span class="card-title">Analysis &amp; Findings</span>
+      <span class="card-title">Data Analyzer Agent</span>
+      <span id="poc-analyze-status" class="badge" style="display:none"></span>
       <span class="chevron">&#9656;</span>
     </div>
     <div class="card-bd">
-      <div id="poc-analyze-results"></div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Analyzes collected data: identifies top findings per category, generates risk assessments, and creates insight summaries.</p>
+      <button class="btn btn-p btn-sm" id="pocAnalyzeBtn" onclick="pocRunAnalyzer()" disabled>Invoke Analyzer</button>
+      <div id="poc-analyze-results" style="margin-top:10px"></div>
     </div>
   </div>
 
-  <!-- Step 4+5: Report + QA (shows after analysis) -->
-  <div class="card" id="poc-report-card" style="display:none">
+  <!-- Step 4: Report -->
+  <div class="card" id="poc-report-card">
     <div class="card-hd" onclick="toggleCard(this)">
-      <span class="badge info">Steps 4-5</span>
-      <span class="card-title">Reports &amp; QA</span>
+      <span class="badge info">Step 4</span>
+      <span class="card-title">Report Builder Agent</span>
       <span class="chevron">&#9656;</span>
     </div>
     <div class="card-bd">
-      <div id="poc-report-results"></div>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Generates branded PowerPoint report (v2.0 template), Excel workbooks, and downloadable assessment package.</p>
+      <div id="poc-report-results">
+        <div class="commentary">Run data collection first to generate reports.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 5: QA -->
+  <div class="card" id="poc-qa-card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="badge info">Step 5</span>
+      <span class="card-title">Quality Checker Agent</span>
+      <span id="poc-qa-status" class="badge" style="display:none"></span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Validates data completeness, cross-references record counts, checks for anomalies, and produces a QA scorecard.</p>
+      <button class="btn btn-p btn-sm" id="pocQaBtn" onclick="pocRunQA()" disabled>Invoke QA Checker</button>
+      <div id="poc-qa-results" style="margin-top:10px"></div>
     </div>
   </div>
 </div>
@@ -1428,10 +1450,11 @@ async function pocCollect(){
 
           if(j.status==='completed'){
             setPocStep(2,'done');
-            // Auto-load results and show analysis
+            pocJobId=d.jobId;
             activeJob=d.jobId;
-            loadResults(d.jobId);
-            pocAnalyze(d.jobId,elapsed);
+            document.getElementById('pocAnalyzeBtn').disabled=false;
+            // Auto-run analyzer
+            pocRunAnalyzer();
           }else{
             setPocStep(2,'error');
           }
@@ -1445,63 +1468,110 @@ async function pocCollect(){
   }
 }
 
-async function pocAnalyze(jobId,collectTime){
+let pocJobId=null;
+
+async function pocRunAnalyzer(){
+  if(!pocJobId)return toast('Run data collection first','err');
   setPocStep(3,'active');
-  document.getElementById('poc-analyze-card').style.display='';
+  document.getElementById('pocAnalyzeBtn').disabled=true;
+  document.getElementById('pocAnalyzeBtn').textContent='Analyzing...';
+  const statusEl=document.getElementById('poc-analyze-status');
+  statusEl.style.display='';statusEl.textContent='Running';statusEl.className='badge warn';
 
   try{
-    const r=await fetch('/api/assessment/results/'+jobId);
+    const r=await fetch('/api/agents/analyze/'+pocJobId);
     const d=await r.json();
-    const sr=d.summary?.search_results||[];
-    const withData=sr.filter(s=>s.data&&s.data.length>0);
-    const totalRecords=sr.reduce((a,s)=>a+(s.count||0),0);
-
-    // Generate insights
-    let findings=[];
-    for(const s of withData){
-      if(s.data&&s.data.length>0){
-        const top=s.data[0];
-        findings.push({search:s.name,item:top[0],count:top[1],total:s.count,unique:s.data.length});
-      }
-    }
-    findings.sort((a,b)=>b.count-a.count);
 
     const el=document.getElementById('poc-analyze-results');
+    const riskColors={HIGH:'err',MEDIUM:'warn',LOW:'info'};
+
     el.innerHTML=`
       <div class="stats">
-        <div class="stat p"><div class="stat-v">${sr.length}</div><div class="stat-l">Searches Run</div></div>
-        <div class="stat g"><div class="stat-v">${withData.length}</div><div class="stat-l">With Findings</div></div>
-        <div class="stat"><div class="stat-v">${fmtNum(totalRecords)}</div><div class="stat-l">Total Records</div></div>
-        <div class="stat"><div class="stat-v">${collectTime}s</div><div class="stat-l">Collection Time</div></div>
+        <div class="stat p"><div class="stat-v">${d.summary.totalSearches}</div><div class="stat-l">Searches</div></div>
+        <div class="stat g"><div class="stat-v">${d.summary.searchesWithData}</div><div class="stat-l">With Data</div></div>
+        <div class="stat"><div class="stat-v">${fmtNum(d.summary.totalRecords)}</div><div class="stat-l">Records</div></div>
+        <div class="stat"><div class="stat-v">${d.summary.totalElapsed}s</div><div class="stat-l">Total Time</div></div>
       </div>
+      ${d.risks.length?`<h4 style="margin:12px 0 8px">Risk Assessment</h4>
+      ${d.risks.map(r=>`<div class="commentary ${r.level==='HIGH'?'err':r.level==='MEDIUM'?'warn':'ok'}" style="margin:4px 0"><span class="badge ${riskColors[r.level]||'info'}">${r.level}</span> ${esc(r.msg)}</div>`).join('')}`:''}
       <h4 style="margin:12px 0 8px">Top Findings</h4>
       <div class="dtbl-wrap"><table class="dtbl">
-        <thead><tr><th>Search</th><th>Top Item</th><th>Count</th><th>Unique</th></tr></thead>
-        <tbody>${findings.slice(0,15).map(f=>`<tr>
+        <thead><tr><th>Search</th><th>Top Item</th><th>Count</th><th>Unique</th><th>Records</th><th>Time</th></tr></thead>
+        <tbody>${d.topFindings.map(f=>`<tr>
           <td style="font-weight:500">${esc(f.search)}</td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.item)}</td>
-          <td style="font-weight:600">${fmtNum(f.count)}</td>
-          <td>${f.unique}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.topItem)}">${esc(f.topItem)}</td>
+          <td style="font-weight:600">${fmtNum(f.topCount)}</td>
+          <td>${f.uniqueValues}</td>
+          <td style="color:var(--text3)">${fmtNum(f.totalRecords)}</td>
+          <td class="poc-timing">${f.elapsed}s</td>
         </tr>`).join('')}</tbody>
       </table></div>`;
 
+    statusEl.textContent='Done';statusEl.className='badge ok';
     setPocStep(3,'done');
+    document.getElementById('pocQaBtn').disabled=false;
 
-    // Show report card
-    document.getElementById('poc-report-card').style.display='';
+    // Enable report downloads
     document.getElementById('poc-report-results').innerHTML=`
       <div class="btn-group">
         <button class="btn btn-p" onclick="downloadJob('zip')">Download Full Package (ZIP)</button>
         <button class="btn btn-s" onclick="downloadJob('ppt')">Download PowerPoint</button>
       </div>
-      <div class="commentary ok" style="margin-top:10px">Reports generated. Download includes Excel files for all searches + PowerPoint with updated charts.</div>`;
+      <div class="commentary ok" style="margin-top:10px">Reports ready. Package includes ${d.summary.searchesWithData} Excel files + branded PowerPoint report.</div>`;
     setPocStep(4,'done');
-    setPocStep(5,'done');
 
   }catch(e){
     document.getElementById('poc-analyze-results').innerHTML=`<div class="error-box"><h4>Analysis failed</h4><p>${esc(e.message)}</p></div>`;
+    statusEl.textContent='Failed';statusEl.className='badge err';
     setPocStep(3,'error');
   }
+  document.getElementById('pocAnalyzeBtn').disabled=false;
+  document.getElementById('pocAnalyzeBtn').textContent='Invoke Analyzer';
+}
+
+async function pocRunQA(){
+  if(!pocJobId)return toast('Run data collection first','err');
+  setPocStep(5,'active');
+  document.getElementById('pocQaBtn').disabled=true;
+  document.getElementById('pocQaBtn').textContent='Checking...';
+  const statusEl=document.getElementById('poc-qa-status');
+  statusEl.style.display='';statusEl.textContent='Running';statusEl.className='badge warn';
+
+  try{
+    const r=await fetch('/api/agents/qa/'+pocJobId);
+    const d=await r.json();
+
+    const gradeColors={A:'ok',B:'ok',C:'warn',F:'err'};
+    const checkIcons={pass:'<span style="color:var(--success)">&#10003;</span>',warn:'<span style="color:var(--warning)">&#9888;</span>',fail:'<span style="color:var(--danger)">&#10007;</span>'};
+
+    const el=document.getElementById('poc-qa-results');
+    el.innerHTML=`
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+        <div style="width:64px;height:64px;border-radius:50%;background:var(--bg3);border:3px solid ${d.grade==='A'||d.grade==='B'?'var(--success)':d.grade==='C'?'var(--warning)':'var(--danger)'};display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700">${d.grade}</div>
+        <div><div style="font-size:22px;font-weight:700">${d.score}%</div><div style="font-size:12px;color:var(--text3)">Quality Score</div></div>
+      </div>
+      <div class="dtbl-wrap"><table class="dtbl">
+        <thead><tr><th>Check</th><th>Result</th><th>Expected</th><th>Status</th></tr></thead>
+        <tbody>${d.checks.map(c=>`<tr>
+          <td>${esc(c.name)}</td>
+          <td style="font-weight:500">${c.value}</td>
+          <td style="color:var(--text3)">${c.expected}</td>
+          <td>${checkIcons[c.status]||c.status}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      ${d.errors.length?`<h4 style="margin:12px 0 6px;color:var(--danger)">Errors (${d.errors.length})</h4>${d.errors.map(e=>`<div class="commentary err" style="margin:3px 0">${esc(e.name)}: ${esc(e.error)}</div>`).join('')}`:''}
+      ${d.emptySearches.length?`<h4 style="margin:12px 0 6px;color:var(--warning)">Empty Searches (${d.emptySearches.length})</h4><div style="font-size:12px;color:var(--text3)">${d.emptySearches.join(', ')}</div>`:''}`;
+
+    statusEl.textContent=d.grade+' ('+d.score+'%)';statusEl.className='badge '+gradeColors[d.grade];
+    setPocStep(5,d.score>=70?'done':'error');
+
+  }catch(e){
+    document.getElementById('poc-qa-results').innerHTML=`<div class="error-box"><h4>QA check failed</h4><p>${esc(e.message)}</p></div>`;
+    statusEl.textContent='Failed';statusEl.className='badge err';
+    setPocStep(5,'error');
+  }
+  document.getElementById('pocQaBtn').disabled=false;
+  document.getElementById('pocQaBtn').textContent='Invoke QA Checker';
 }
 
 // ═══ INIT ═══

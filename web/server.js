@@ -705,6 +705,197 @@ app.post('/api/github/dispatch/:workflow', (req, res) => {
   });
 });
 
+// ─── Agent Actions ──────────────────────────────────────────────────────────
+
+// Search Validator: countOnly probe on all searches
+app.post('/api/agents/validate', async (req, res) => {
+  const { apiKey, baseUrl, timeInterval } = req.body;
+  if (!apiKey) return res.status(400).json({ error: 'API key required' });
+
+  const csvPath = fs.existsSync(path.join(TEMPLATES_DIR, 'searches.csv'))
+    ? path.join(TEMPLATES_DIR, 'searches.csv')
+    : path.join(TEMPLATES_DIR, 'input.csv');
+
+  const scriptCode = `
+import csv, json, requests, time, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+API_KEY = "${apiKey.replace(/"/g, '\\"')}"
+BASE_URL = "${(baseUrl || 'https://api.eu.xdr.trendmicro.com').replace(/"/g, '\\"')}"
+TIME_H = ${parseInt(timeInterval) || 24}
+
+end = datetime.now(timezone.utc)
+start = end - timedelta(hours=TIME_H)
+ss = start.strftime("%Y-%m-%dT%H:%M:%SZ")
+ee = end.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+config = json.load(open("${path.join(TEMPLATES_DIR, 'config.json').replace(/\\/g, '\\\\')}"))
+base_q = config.get("base_query", "(productCode:pdi OR productCode:xns)")
+
+with open("${csvPath.replace(/\\/g, '\\\\')}") as f:
+    lines = [l for l in f if not l.strip().startswith("#")]
+reader = csv.DictReader(lines)
+searches = [r for r in reader if r.get("name", "").strip() and r.get("enabled", "true").lower() != "false"]
+
+ENDPOINTS = {
+    "network": "/v3.0/search/networkActivities",
+    "detections": "/v3.0/search/detections",
+    "endpoint": "/v3.0/search/endpointActivities",
+}
+
+results = []
+sess = requests.Session()
+
+for i, s in enumerate(searches):
+    name = s.get("name", "")
+    log_type = s.get("log_type", "network")
+    qt = s.get("query_type", "base")
+    qv = s.get("query_value", "")
+
+    if qt == "base": query = base_q
+    elif qt == "filter": query = f"{base_q} AND {qv}" if qv else base_q
+    elif qt == "raw": query = qv
+    else: query = base_q
+
+    eps = ["network"] if log_type == "network" else ["detections"] if log_type == "detections" else ["network", "detections"]
+
+    total_count = 0
+    t0 = time.time()
+    status = "ok"
+    for ep in eps:
+        url = BASE_URL + ENDPOINTS.get(ep, ENDPOINTS["network"])
+        h = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json", "TMV1-Query": query}
+        try:
+            r = sess.get(url, headers=h, params={"startDateTime": ss, "endDateTime": ee, "mode": "countOnly"}, timeout=30)
+            if r.status_code == 200:
+                total_count += r.json().get("totalCount", 0)
+            else:
+                status = f"err:{r.status_code}"
+        except Exception as e:
+            status = f"err:{e}"
+
+    elapsed = round(time.time() - t0, 1)
+    results.append({"name": name, "category": s.get("category", ""), "log_type": log_type, "count": total_count, "status": status, "elapsed": elapsed})
+    print(json.dumps({"type": "progress", "current": i+1, "total": len(searches), "name": name}))
+    sys.stdout.flush()
+
+print("---JSON_START---")
+print(json.dumps({"results": results, "total": len(results), "ok": sum(1 for r in results if r["status"] == "ok"), "with_data": sum(1 for r in results if r["count"] > 0)}))
+print("---JSON_END---")
+`;
+
+  const tmpScript = path.join(JOBS_DIR, 'validate_' + Date.now() + '.py');
+  fs.writeFileSync(tmpScript, scriptCode);
+
+  try {
+    const { code, result } = await spawnPython(tmpScript, [], {}, null, null, 300000);
+    fs.unlinkSync(tmpScript);
+    if (result) {
+      res.json(result);
+    } else {
+      res.json({ error: 'No results', code });
+    }
+  } catch (e) {
+    fs.unlinkSync(tmpScript);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Data Analyzer: analyze a completed job's results
+app.get('/api/agents/analyze/:jobId', (req, res) => {
+  const jobDir = path.join(JOBS_DIR, req.params.jobId);
+  const summaryPath = path.join(jobDir, 'summary.json');
+  if (!fs.existsSync(summaryPath)) return res.status(404).json({ error: 'No summary found' });
+
+  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
+  const sr = summary.search_results || [];
+
+  // Generate insights
+  const findings = [];
+  const categories = {};
+  let totalRecords = 0;
+  let searchesWithData = 0;
+  let totalElapsed = 0;
+
+  for (const s of sr) {
+    totalRecords += s.count || 0;
+    totalElapsed += s.elapsed || 0;
+    if (s.data && s.data.length > 0) {
+      searchesWithData++;
+      const cat = s.name.split(' ')[0]; // rough category
+      if (!categories[cat]) categories[cat] = [];
+      categories[cat].push(s);
+      // Top finding per search
+      findings.push({
+        search: s.name,
+        topItem: s.data[0][0],
+        topCount: s.data[0][1],
+        uniqueValues: s.data.length,
+        totalRecords: s.count,
+        elapsed: s.elapsed || 0,
+      });
+    }
+  }
+
+  findings.sort((a, b) => b.topCount - a.topCount);
+
+  // Risk scoring
+  const risks = [];
+  for (const f of findings) {
+    if (f.search.includes('Bad States') && f.topCount > 0) risks.push({ level: 'HIGH', msg: `${f.topCount} connections to sanctioned countries (${f.topItem})` });
+    if (f.search.includes('Darknet') && f.topCount > 0) risks.push({ level: 'HIGH', msg: `${f.topCount} darknet/Tor connections detected` });
+    if (f.search.includes('External RDP') && f.topCount > 0) risks.push({ level: 'MEDIUM', msg: `${f.topCount} external RDP connections (${f.topItem})` });
+    if (f.search.includes('Unsuccessful') && f.topCount > 10) risks.push({ level: 'MEDIUM', msg: `${f.topCount} failed logon attempts (${f.topItem})` });
+    if (f.search.includes('Remote Access') && f.topCount > 0) risks.push({ level: 'LOW', msg: `Remote access tool usage: ${f.topItem} (${f.topCount})` });
+  }
+
+  res.json({
+    summary: { totalSearches: sr.length, searchesWithData, totalRecords, totalElapsed: Math.round(totalElapsed) },
+    topFindings: findings.slice(0, 20),
+    risks: risks.sort((a, b) => { const o = { HIGH: 0, MEDIUM: 1, LOW: 2 }; return (o[a.level] || 3) - (o[b.level] || 3); }),
+  });
+});
+
+// Quality Checker: QA scorecard for a completed job
+app.get('/api/agents/qa/:jobId', (req, res) => {
+  const jobDir = path.join(JOBS_DIR, req.params.jobId);
+  const summaryPath = path.join(jobDir, 'summary.json');
+  if (!fs.existsSync(summaryPath)) return res.status(404).json({ error: 'No summary found' });
+
+  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
+  const sr = summary.search_results || [];
+
+  const checks = [];
+  const withData = sr.filter(s => s.data && s.data.length > 0);
+  const withErrors = sr.filter(s => s.error);
+  const withZero = sr.filter(s => !s.error && (!s.data || s.data.length === 0));
+
+  checks.push({ name: 'Searches executed', value: sr.length, expected: 39, status: sr.length >= 30 ? 'pass' : 'warn' });
+  checks.push({ name: 'Searches with data', value: withData.length, expected: sr.length, status: withData.length > sr.length * 0.6 ? 'pass' : 'warn' });
+  checks.push({ name: 'Searches with errors', value: withErrors.length, expected: 0, status: withErrors.length === 0 ? 'pass' : 'fail' });
+  checks.push({ name: 'Empty searches', value: withZero.length, expected: '<10', status: withZero.length < 10 ? 'pass' : 'warn' });
+  checks.push({ name: 'Total records', value: summary.total_records || 0, expected: '>1000', status: (summary.total_records || 0) > 1000 ? 'pass' : 'fail' });
+
+  const excelDir = path.join(jobDir, 'excel');
+  const excelCount = fs.existsSync(excelDir) ? fs.readdirSync(excelDir).filter(f => f.endsWith('.xlsx')).length : 0;
+  const hasPpt = fs.existsSync(path.join(jobDir, 'report.pptx'));
+
+  checks.push({ name: 'Excel files generated', value: excelCount, expected: sr.length, status: excelCount >= sr.length * 0.8 ? 'pass' : 'warn' });
+  checks.push({ name: 'PowerPoint report', value: hasPpt ? 'Yes' : 'No', expected: 'Yes', status: hasPpt ? 'pass' : 'fail' });
+
+  const passCount = checks.filter(c => c.status === 'pass').length;
+  const score = Math.round((passCount / checks.length) * 100);
+
+  res.json({
+    score,
+    grade: score >= 90 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : 'F',
+    checks,
+    errors: withErrors.map(s => ({ name: s.name, error: s.error })),
+    emptySearches: withZero.map(s => s.name),
+  });
+});
+
 // ─── History ────────────────────────────────────────────────────────────────
 app.get('/api/history', (req, res) => res.json(loadHistory()));
 app.delete('/api/history', (req, res) => { saveHistory([]); res.json({ success: true }); });
