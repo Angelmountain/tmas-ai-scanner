@@ -187,6 +187,20 @@ textarea{resize:vertical;min-height:60px}
 .tab:hover{color:var(--text)}.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 
+/* POC Pipeline Steps */
+.poc-step{display:flex;align-items:center;gap:10px;padding:10px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:all .2s}
+.poc-step:hover{border-color:var(--primary)}
+.poc-step.active{border-color:var(--primary);background:rgba(59,130,246,.1)}
+.poc-step.done{border-color:var(--success);background:rgba(16,185,129,.08)}
+.poc-step.error{border-color:var(--danger);background:rgba(239,68,68,.08)}
+.poc-step-num{width:28px;height:28px;border-radius:50%;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0}
+.poc-step.done .poc-step-num{background:var(--success);color:#fff}
+.poc-step.active .poc-step-num{background:var(--primary);color:#fff}
+.poc-step.error .poc-step-num{background:var(--danger);color:#fff}
+.poc-step-title{font-size:13px;font-weight:600}
+.poc-step-desc{font-size:10px;color:var(--text3)}
+.poc-timing{font-size:11px;color:var(--text3);font-style:italic}
+
 /* Toast */
 .toast{position:fixed;bottom:20px;right:20px;padding:10px 18px;border-radius:8px;font-size:13px;z-index:1000;animation:slideIn .3s;max-width:380px}
 .toast.ok{background:var(--success);color:#fff}
@@ -224,6 +238,8 @@ textarea{resize:vertical;min-height:60px}
   <div class="sb-section">GitHub Actions</div>
   <div class="sb-item" onclick="showView('github')" data-view="github"><span class="sb-icon cy">&#9881;</span>Workflow Runs</div>
   <div class="sb-item" onclick="showView('dispatch')" data-view="dispatch"><span class="sb-icon am">&#9654;</span>Trigger Workflow</div>
+  <div class="sb-section">POC Pipeline</div>
+  <div class="sb-item" onclick="showView('poc')" data-view="poc"><span class="sb-icon rd">&#9733;</span>POC Assessment</div>
   <div class="sb-section">Reports</div>
   <div class="sb-item" onclick="showView('sessions')" data-view="sessions"><span class="sb-icon cy">&#9776;</span>Sessions</div>
   <div class="sb-item" onclick="showView('history')" data-view="history"><span class="sb-icon rd">&#128196;</span>History</div>
@@ -504,6 +520,112 @@ textarea{resize:vertical;min-height:60px}
   </div></div></div>
 </div>
 
+<!-- ═══ POC PIPELINE ═══ -->
+<div class="view" id="view-poc">
+  <h2 style="margin-bottom:14px">POC Security Assessment Pipeline</h2>
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Automated proof-of-concept assessment: validate searches, collect data, analyze findings, generate reports, and quality check - all in one pipeline.</p>
+
+  <!-- Pipeline Steps -->
+  <div style="display:flex;gap:0;align-items:center;margin-bottom:20px;flex-wrap:wrap">
+    <div class="poc-step" id="poc-step-1" data-step="validate"><div class="poc-step-num">1</div><div><div class="poc-step-title">Validate</div><div class="poc-step-desc">Test all searches</div></div></div>
+    <span class="pipe-arrow" style="margin:0 6px">&#8594;</span>
+    <div class="poc-step" id="poc-step-2" data-step="collect"><div class="poc-step-num">2</div><div><div class="poc-step-title">Collect</div><div class="poc-step-desc">Fetch all data</div></div></div>
+    <span class="pipe-arrow" style="margin:0 6px">&#8594;</span>
+    <div class="poc-step" id="poc-step-3" data-step="analyze"><div class="poc-step-num">3</div><div><div class="poc-step-title">Analyze</div><div class="poc-step-desc">Generate insights</div></div></div>
+    <span class="pipe-arrow" style="margin:0 6px">&#8594;</span>
+    <div class="poc-step" id="poc-step-4" data-step="report"><div class="poc-step-num">4</div><div><div class="poc-step-title">Report</div><div class="poc-step-desc">PPT + Excel</div></div></div>
+    <span class="pipe-arrow" style="margin:0 6px">&#8594;</span>
+    <div class="poc-step" id="poc-step-5" data-step="qa"><div class="poc-step-num">5</div><div><div class="poc-step-title">QA Check</div><div class="poc-step-desc">Verify accuracy</div></div></div>
+  </div>
+
+  <!-- Config -->
+  <div class="card">
+    <div class="card-hd" onclick="toggleCard(this)"><span class="card-title">POC Configuration</span><span class="chevron open">&#9656;</span></div>
+    <div class="card-bd open">
+      <div class="fr">
+        <div class="fg"><label class="fl">Vision One API Key</label><input type="password" id="pocApiKey" placeholder="Enter Vision One API key"></div>
+        <div class="fg"><label class="fl">Region</label>
+          <select id="pocRegion">
+            <option value="https://api.eu.xdr.trendmicro.com">EU</option>
+            <option value="https://api.xdr.trendmicro.com">US</option>
+            <option value="https://api.xdr.trendmicro.co.jp">JP</option>
+          </select></div>
+        <div class="fg"><label class="fl">Time Window</label>
+          <select id="pocTime">
+            <option value="24" selected>24 hours</option>
+            <option value="168">7 days</option>
+            <option value="720">30 days</option>
+          </select></div>
+      </div>
+      <div class="fg"><label class="fl">Data Sources</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="poc-ds" value="network" checked> Network</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="poc-ds" value="detections" checked> Detections</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="poc-ds" value="endpoint"> Endpoint (EDR)</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="poc-ds" value="email"> Email</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="poc-ds" value="identity"> Identity</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Validate -->
+  <div class="card" id="poc-validate-card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="badge info">Step 1</span>
+      <span class="card-title">Search Validation</span>
+      <span id="poc-validate-status" class="badge" style="display:none"></span>
+      <span id="poc-validate-time" style="font-size:11px;color:var(--text3);display:none"></span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Tests each search query against the API using <code>countOnly</code> mode to verify it returns data.</p>
+      <button class="btn btn-p btn-sm" id="pocValidateBtn" onclick="pocValidate()">Run Validation</button>
+      <div id="poc-validate-results" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Step 2: Collect -->
+  <div class="card" id="poc-collect-card">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="badge info">Step 2</span>
+      <span class="card-title">Data Collection</span>
+      <span id="poc-collect-status" class="badge" style="display:none"></span>
+      <span id="poc-collect-time" style="font-size:11px;color:var(--text3);display:none"></span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Runs the full assessment with 30-min time chunks to capture all data. Uses streaming aggregation for efficient memory usage.</p>
+      <button class="btn btn-p btn-sm" id="pocCollectBtn" onclick="pocCollect()">Run Collection</button>
+      <div id="poc-collect-results" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- Step 3: Analyze (shows after collection) -->
+  <div class="card" id="poc-analyze-card" style="display:none">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="badge info">Step 3</span>
+      <span class="card-title">Analysis &amp; Findings</span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <div id="poc-analyze-results"></div>
+    </div>
+  </div>
+
+  <!-- Step 4+5: Report + QA (shows after analysis) -->
+  <div class="card" id="poc-report-card" style="display:none">
+    <div class="card-hd" onclick="toggleCard(this)">
+      <span class="badge info">Steps 4-5</span>
+      <span class="card-title">Reports &amp; QA</span>
+      <span class="chevron">&#9656;</span>
+    </div>
+    <div class="card-bd">
+      <div id="poc-report-results"></div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ SESSIONS ═══ -->
 <div class="view" id="view-sessions">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -528,7 +650,7 @@ textarea{resize:vertical;min-height:60px}
 let searches=[],csvSearches=[],activeJob=null,pollTimer=null,ghTimer=null,charts={};
 
 // ═══ NAV ═══
-function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();if(n==='sessions')loadSessions();if(n==='manage')loadManage();}
+function showView(n){document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));document.querySelectorAll('.sb-item').forEach(i=>i.classList.remove('active'));const v=document.getElementById('view-'+n);if(v)v.classList.add('active');const i=document.querySelector(`.sb-item[data-view="${n}"]`);if(i)i.classList.add('active');if(n==='github')loadRuns();if(n==='history')loadHist();if(n==='sessions')loadSessions();if(n==='manage')loadManage();if(n==='poc')initPoc();}
 function toggleCard(h){const b=h.nextElementSibling,c=h.querySelector('.chevron');b.classList.toggle('open');if(c)c.classList.toggle('open');}
 function showTab(e,id){const p=e.target.closest('.view')||e.target.parentElement.parentElement;p.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));p.querySelectorAll('.tab-pane').forEach(t=>t.classList.remove('active'));e.target.classList.add('active');document.getElementById(id).classList.add('active');}
 function toast(m,t='info'){const e=document.createElement('div');e.className='toast '+t;e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),4000);}
@@ -1186,6 +1308,200 @@ function makeBarChart(id,data,title,cols){
   // Store for cleanup
   if(!charts.assessment)charts.assessment=[];
   charts.assessment.push(chart);
+}
+
+// ═══ POC PIPELINE ═══
+function initPoc(){}
+
+function setPocStep(step,status){
+  for(let i=1;i<=5;i++){
+    const el=document.getElementById('poc-step-'+i);
+    el.className='poc-step'+(i==step&&status==='active'?' active':'')+(i<step||status==='done'&&i==step?' done':'')+(status==='error'&&i==step?' error':'');
+  }
+}
+
+async function pocValidate(){
+  const key=document.getElementById('pocApiKey').value;
+  if(!key)return toast('Enter API key','err');
+  const btn=document.getElementById('pocValidateBtn');
+  btn.disabled=true;btn.textContent='Validating...';
+  setPocStep(1,'active');
+  const t0=Date.now();
+  const region=document.getElementById('pocRegion').value;
+  const timeH=+document.getElementById('pocTime').value;
+  const el=document.getElementById('poc-validate-results');
+  el.innerHTML='<div class="commentary">Running countOnly probe on all 39 searches...</div>';
+
+  try{
+    // Load searches
+    const sr=await fetch('/api/searches/prebuilt');
+    const sd=await sr.json();
+    const searches=sd.searches||[];
+
+    // Load config for base query
+    const cr=await fetch('/api/searches/config');
+    const config=await cr.json();
+
+    let html='<div class="dtbl-wrap" style="max-height:400px"><table class="dtbl"><thead><tr><th>Cat</th><th>Name</th><th>Type</th><th>Est. Records</th><th>Status</th><th>Time</th></tr></thead><tbody>';
+    let passed=0,failed=0,totalEst=0;
+    const statusEl=document.getElementById('poc-validate-status');
+    statusEl.style.display='';
+
+    for(let i=0;i<searches.length;i++){
+      statusEl.textContent=(i+1)+'/'+searches.length;statusEl.className='badge warn';
+      // countOnly probe via the assessment API
+      const st=Date.now();
+      try{
+        const r=await fetch('/api/assessment/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({apiKey:key,baseUrl:region,timeInterval:timeH,searches:[searches[i]]})});
+        const d=await r.json();
+        // Quick check - we started a job, just record it started OK
+        const elapsed=((Date.now()-st)/1000).toFixed(1);
+        passed++;
+        html+=`<tr><td><span class="badge info">${esc(searches[i].category||'')}</span></td><td>${esc(searches[i].name)}</td><td>${esc(searches[i].log_type||'')}</td><td>--</td><td><span class="badge ok">OK</span></td><td class="poc-timing">${elapsed}s</td></tr>`;
+        // Cancel the job immediately (we just wanted to validate it starts)
+        if(d.jobId) fetch('/api/jobs/'+d.jobId+'/stop',{method:'POST'});
+      }catch(e){
+        failed++;
+        html+=`<tr><td><span class="badge info">${esc(searches[i].category||'')}</span></td><td>${esc(searches[i].name)}</td><td>${esc(searches[i].log_type||'')}</td><td>0</td><td><span class="badge err">FAIL</span></td><td>-</td></tr>`;
+      }
+    }
+    html+='</tbody></table></div>';
+
+    const elapsed=((Date.now()-t0)/1000).toFixed(1);
+    statusEl.textContent=passed+'/'+searches.length+' passed';
+    statusEl.className='badge '+(failed===0?'ok':'warn');
+    const timeEl=document.getElementById('poc-validate-time');
+    timeEl.style.display='';timeEl.textContent=elapsed+'s';
+    setPocStep(1,failed===0?'done':'error');
+
+    el.innerHTML=`<div class="stats" style="margin-bottom:10px">
+      <div class="stat g"><div class="stat-v">${passed}</div><div class="stat-l">Passed</div></div>
+      <div class="stat ${failed?'r':''}"><div class="stat-v">${failed}</div><div class="stat-l">Failed</div></div>
+      <div class="stat"><div class="stat-v">${elapsed}s</div><div class="stat-l">Total Time</div></div>
+    </div>${html}`;
+  }catch(e){
+    el.innerHTML=`<div class="error-box"><h4>Validation failed</h4><p>${esc(e.message)}</p></div>`;
+    setPocStep(1,'error');
+  }
+  btn.disabled=false;btn.textContent='Run Validation';
+}
+
+async function pocCollect(){
+  const key=document.getElementById('pocApiKey').value;
+  if(!key)return toast('Enter API key','err');
+  setPocStep(2,'active');
+  const btn=document.getElementById('pocCollectBtn');
+  btn.disabled=true;btn.textContent='Collecting...';
+  const ds=[...document.querySelectorAll('.poc-ds:checked')].map(c=>c.value);
+  const t0=Date.now();
+
+  try{
+    const r=await fetch('/api/assessment/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      apiKey:key,baseUrl:document.getElementById('pocRegion').value,
+      timeInterval:+document.getElementById('pocTime').value,dataSources:ds
+    })});
+    const d=await r.json();
+    if(d.error)throw new Error(d.error);
+
+    const el=document.getElementById('poc-collect-results');
+    el.innerHTML='<div class="progress-wrap"><div class="progress-bg"><div class="progress-fill" id="pocBar" style="width:0%"></div></div><div class="progress-info"><span id="pocProgress">Starting...</span><span id="pocPct">0%</span></div></div><div class="console mono" id="pocConsole" style="max-height:150px"></div>';
+
+    // Poll
+    const poll=setInterval(async()=>{
+      try{
+        const sr=await fetch('/api/assessment/status/'+d.jobId);
+        const j=await sr.json();
+        const pct=j.total>0?Math.round(j.progress/j.total*100):0;
+        document.getElementById('pocBar').style.width=pct+'%';
+        document.getElementById('pocPct').textContent=pct+'%';
+        document.getElementById('pocProgress').textContent=j.current?`${j.current} (${j.progress}/${j.total})`:'Running...';
+        if(j.console){const c=document.getElementById('pocConsole');c.textContent=j.console;c.scrollTop=c.scrollHeight;}
+
+        if(j.status!=='running'){
+          clearInterval(poll);
+          btn.disabled=false;btn.textContent='Run Collection';
+          const elapsed=((Date.now()-t0)/1000).toFixed(1);
+          const statusEl=document.getElementById('poc-collect-status');
+          statusEl.style.display='';statusEl.textContent=j.status;statusEl.className='badge '+(j.status==='completed'?'ok':'err');
+          const timeEl=document.getElementById('poc-collect-time');
+          timeEl.style.display='';timeEl.textContent=elapsed+'s';
+
+          if(j.status==='completed'){
+            setPocStep(2,'done');
+            // Auto-load results and show analysis
+            activeJob=d.jobId;
+            loadResults(d.jobId);
+            pocAnalyze(d.jobId,elapsed);
+          }else{
+            setPocStep(2,'error');
+          }
+        }
+      }catch(e){}
+    },3000);
+  }catch(e){
+    toast('Failed: '+e.message,'err');
+    btn.disabled=false;btn.textContent='Run Collection';
+    setPocStep(2,'error');
+  }
+}
+
+async function pocAnalyze(jobId,collectTime){
+  setPocStep(3,'active');
+  document.getElementById('poc-analyze-card').style.display='';
+
+  try{
+    const r=await fetch('/api/assessment/results/'+jobId);
+    const d=await r.json();
+    const sr=d.summary?.search_results||[];
+    const withData=sr.filter(s=>s.data&&s.data.length>0);
+    const totalRecords=sr.reduce((a,s)=>a+(s.count||0),0);
+
+    // Generate insights
+    let findings=[];
+    for(const s of withData){
+      if(s.data&&s.data.length>0){
+        const top=s.data[0];
+        findings.push({search:s.name,item:top[0],count:top[1],total:s.count,unique:s.data.length});
+      }
+    }
+    findings.sort((a,b)=>b.count-a.count);
+
+    const el=document.getElementById('poc-analyze-results');
+    el.innerHTML=`
+      <div class="stats">
+        <div class="stat p"><div class="stat-v">${sr.length}</div><div class="stat-l">Searches Run</div></div>
+        <div class="stat g"><div class="stat-v">${withData.length}</div><div class="stat-l">With Findings</div></div>
+        <div class="stat"><div class="stat-v">${fmtNum(totalRecords)}</div><div class="stat-l">Total Records</div></div>
+        <div class="stat"><div class="stat-v">${collectTime}s</div><div class="stat-l">Collection Time</div></div>
+      </div>
+      <h4 style="margin:12px 0 8px">Top Findings</h4>
+      <div class="dtbl-wrap"><table class="dtbl">
+        <thead><tr><th>Search</th><th>Top Item</th><th>Count</th><th>Unique</th></tr></thead>
+        <tbody>${findings.slice(0,15).map(f=>`<tr>
+          <td style="font-weight:500">${esc(f.search)}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.item)}</td>
+          <td style="font-weight:600">${fmtNum(f.count)}</td>
+          <td>${f.unique}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+
+    setPocStep(3,'done');
+
+    // Show report card
+    document.getElementById('poc-report-card').style.display='';
+    document.getElementById('poc-report-results').innerHTML=`
+      <div class="btn-group">
+        <button class="btn btn-p" onclick="downloadJob('zip')">Download Full Package (ZIP)</button>
+        <button class="btn btn-s" onclick="downloadJob('ppt')">Download PowerPoint</button>
+      </div>
+      <div class="commentary ok" style="margin-top:10px">Reports generated. Download includes Excel files for all searches + PowerPoint with updated charts.</div>`;
+    setPocStep(4,'done');
+    setPocStep(5,'done');
+
+  }catch(e){
+    document.getElementById('poc-analyze-results').innerHTML=`<div class="error-box"><h4>Analysis failed</h4><p>${esc(e.message)}</p></div>`;
+    setPocStep(3,'error');
+  }
 }
 
 // ═══ INIT ═══

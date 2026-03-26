@@ -664,6 +664,7 @@ def process_single_search(
     logger.info(
         "Processing search %d/%d: %s [%s]", index, total, search_name, log_type
     )
+    search_start_time = time.time()
 
     try:
         # Stream and aggregate - counts by field, O(unique) memory
@@ -730,6 +731,7 @@ def process_single_search(
         result_info["error"] = msg
         emit_error(msg, name=search_name)
 
+    result_info["elapsed"] = round(time.time() - search_start_time, 1)
     return result_info
 
 
@@ -949,6 +951,7 @@ def run_assessment(
             "data": r.get("data", []),
             "columns": r.get("columns", []),
             "error": r.get("error"),
+            "elapsed": r.get("elapsed", 0),
         }
         search_results.append(entry)
 
