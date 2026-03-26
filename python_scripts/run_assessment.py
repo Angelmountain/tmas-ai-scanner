@@ -114,9 +114,11 @@ def _build_session() -> requests.Session:
     # server's 60-second timeout. Blindly retrying the same request wastes time.
     # We handle 504/599/408 explicitly in _search_chunk.
     retry = Retry(
-        total=0,             # No auto-retry (we handle timeouts in _search_chunk)
-        backoff_factor=0,
-        status_forcelist=[],  # Handle all status codes ourselves
+        total=2,              # Retry twice on connection/read errors
+        backoff_factor=2,     # Wait 2s, then 4s between retries
+        status_forcelist=[429, 500, 502, 503],  # Retry on these server errors
+        allowed_methods=["GET"],  # Only retry GET (safe)
+        raise_on_status=False,    # Don't raise, let our code handle status
     )
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("http://", adapter)
@@ -201,7 +203,7 @@ class VisionOneClient:
 
             try:
                 resp = self.session.get(
-                    request_url, params=params, headers=headers, timeout=30
+                    request_url, params=params, headers=headers, timeout=45
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 60))
@@ -359,7 +361,7 @@ class VisionOneClient:
                     probe_url,
                     params={"startDateTime": start_time, "endDateTime": end_time, "mode": "countOnly"},
                     headers=probe_headers,
-                    timeout=30,
+                    timeout=45,
                 )
                 if probe.status_code == 200:
                     count_est = probe.json().get("totalCount", 0)
