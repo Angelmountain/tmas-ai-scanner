@@ -396,7 +396,7 @@ app.get('/api/searches/domains', (req, res) => {
 
 // ─── Assessment: Run ────────────────────────────────────────────────────────
 app.post('/api/assessment/run', async (req, res) => {
-  const { apiKey, baseUrl, timeInterval, searches, csvContent } = req.body;
+  const { apiKey, baseUrl, timeInterval, searches, csvContent, dataSources } = req.body;
   if (!apiKey) return res.status(400).json({ error: 'API key required' });
 
   // Validate inputs
@@ -447,6 +447,10 @@ app.post('/api/assessment/run', async (req, res) => {
       '--output', jobDir,
       '--time-interval', String(timeInterval || 720),
     ];
+    // Pass selected data sources as comma-separated list
+    if (dataSources && dataSources.length > 0) {
+      args.push('--data-sources', dataSources.join(','));
+    }
     const env = {
       TREND_MICRO_API_KEY: apiKey,
       TREND_MICRO_BASE_URL: baseUrl || 'https://api.eu.xdr.trendmicro.com',

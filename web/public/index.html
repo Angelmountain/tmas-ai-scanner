@@ -255,6 +255,19 @@ textarea{resize:vertical;min-height:60px}
             <option value="2160">Last 90 days</option>
           </select></div>
       </div>
+      <div class="fg"><label class="fl">Data Sources</label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="network" checked> Network Activities</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="detections" checked> Detection Events</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="endpoint"> Endpoint Telemetry</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="email"> Email Activities</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="cloud"> Cloud Activities</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="identity"> Identity Activities</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="container"> Container Activities</label>
+          <label style="display:flex;align-items:center;gap:4px;font-size:12px;cursor:pointer"><input type="checkbox" class="ds-check" value="mobile"> Mobile Activities</label>
+        </div>
+        <div class="fhint">Select which Vision One data sources to search. Network + Detections selected by default. Enable more for comprehensive results (slower).</div>
+      </div>
     </div>
   </div>
 
@@ -596,8 +609,9 @@ async function startAssessmentJob(key,sel,csvContent){
   document.getElementById('pipelineComment').className='commentary';
   document.getElementById('pipelineComment').textContent='Validating configuration and preparing search queries...';
   try{
-    const body=csvContent?{apiKey:key,baseUrl:document.getElementById('v1Region').value,timeInterval:+document.getElementById('v1Time').value,csvContent}
-      :{apiKey:key,baseUrl:document.getElementById('v1Region').value,timeInterval:+document.getElementById('v1Time').value,searches:sel};
+    const dataSources=[...document.querySelectorAll('.ds-check:checked')].map(c=>c.value);
+    const body=csvContent?{apiKey:key,baseUrl:document.getElementById('v1Region').value,timeInterval:+document.getElementById('v1Time').value,csvContent,dataSources}
+      :{apiKey:key,baseUrl:document.getElementById('v1Region').value,timeInterval:+document.getElementById('v1Time').value,searches:sel,dataSources};
     const r=await fetch('/api/assessment/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(d.error)throw new Error(d.error);

@@ -246,12 +246,16 @@ class VisionOneClient:
         end_time: str,
         query: Optional[str] = None,
         sorting_field: Optional[str] = None,
+        data_sources: Optional[List[str]] = None,
     ) -> Tuple[Dict[str, int], int]:
         """Fetch ALL data and aggregate on-the-fly.
 
         Instead of storing millions of raw records in memory, this counts
         by the aggregation field as records stream in. Memory usage is
         O(unique_values) instead of O(total_records).
+
+        If data_sources is provided and log_type is 'everything', uses
+        those specific endpoints instead of all 8.
 
         Returns (counts_dict, total_records_seen).
         """
@@ -261,8 +265,12 @@ class VisionOneClient:
             return {}, 0
 
         if log_type == "everything":
-            # Query ALL available endpoints (matches console "all" mode)
-            log_types = list(self.ENDPOINTS.keys())
+            if data_sources:
+                # Use user-selected data sources
+                log_types = [ds for ds in data_sources if ds in self.ENDPOINTS]
+            else:
+                # Default: network + detections (fast, covers most data)
+                log_types = ["network", "detections"]
         else:
             log_types = [log_type]
 
@@ -567,6 +575,7 @@ def process_single_search(
     start_time: str,
     end_time: str,
     excel_dir: str,
+    data_sources: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Process one search row. Returns a result dict for the summary."""
     search_name = row.get("name", f"search_{index}").strip()
@@ -602,6 +611,7 @@ def process_single_search(
         counts, record_count = client.search_and_aggregate(
             log_type, start_time, end_time, query=query,
             sorting_field=sorting_field,
+            data_sources=data_sources,
         )
 
         # Look up column labels from aggregation rules
@@ -779,8 +789,13 @@ def run_assessment(
     api_key: str,
     base_url: str,
     template_path: Optional[str] = None,
+    data_sources: Optional[List[str]] = None,
 ) -> None:
-    """Top-level orchestrator: CSV -> API -> Excel -> PowerPoint -> JSON."""
+    """Top-level orchestrator: CSV -> API -> Excel -> PowerPoint -> JSON.
+
+    If data_sources is provided, searches with log_type='everything' will
+    use those specific endpoints instead of all 8.
+    """
 
     excel_dir = os.path.join(output_dir, "excel")
     os.makedirs(excel_dir, exist_ok=True)
@@ -832,6 +847,7 @@ def run_assessment(
             fut = pool.submit(
                 process_single_search,
                 client, row, idx, total, start_time, end_time, excel_dir,
+                data_sources,
             )
             future_map[fut] = idx - 1  # 0-based slot
 
@@ -938,6 +954,11 @@ def main() -> int:
         choices=["DEBUG", "INFO", "WARNING", "ERROR"],
         help="Logging verbosity (default: INFO).",
     )
+    parser.add_argument(
+        "--data-sources",
+        default=None,
+        help="Comma-separated list of data sources to search (e.g. network,detections,endpoint). Default: use log_type from CSV.",
+    )
     args = parser.parse_args()
 
     logging.root.setLevel(getattr(logging, args.log_level))
@@ -967,6 +988,7 @@ def main() -> int:
             api_key=api_key,
             base_url=base_url,
             template_path=args.template,
+            data_sources=args.data_sources.split(",") if args.data_sources else None,
         )
     except Exception as exc:
         emit_error(f"Fatal error: {exc}")
