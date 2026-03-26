@@ -2,13 +2,7 @@
 name: deployment-manager
 description: Manages Terraform infrastructure, EC2 deployment, IP allowlists, and git operations for the assessment platform
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Deployment Manager Agent

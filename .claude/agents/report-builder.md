@@ -2,13 +2,7 @@
 name: report-builder
 description: Builds PowerPoint, Excel, and HTML reports from assessment data and analysis insights
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Report Builder Agent

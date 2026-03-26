@@ -2,13 +2,7 @@
 name: search-validator
 description: Validates all 39 search queries against the Vision One API and reports which work and which need fixing
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Search Validator Agent

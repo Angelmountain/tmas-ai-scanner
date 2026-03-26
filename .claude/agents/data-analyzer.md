@@ -2,13 +2,7 @@
 name: data-analyzer
 description: Analyzes collected assessment data to identify key security findings, trends, and insights
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Data Analyzer Agent

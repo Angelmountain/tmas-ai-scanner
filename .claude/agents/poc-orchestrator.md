@@ -2,14 +2,7 @@
 name: poc-orchestrator
 description: Master agent that coordinates the full POC pipeline - validates, collects, analyzes, reports, and quality-checks the security assessment
 model: opus
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
-  - Skill
+tools: Read, Write, Edit, Bash, Glob, Grep, Skill
 ---
 
 # POC Orchestrator Agent

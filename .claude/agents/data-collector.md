@@ -2,13 +2,7 @@
 name: data-collector
 description: Runs full security assessments via the Vision One API and collects data across all search definitions
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Data Collector Agent

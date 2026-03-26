@@ -2,13 +2,7 @@
 name: search-optimizer
 description: Optimizes search queries for better coverage, performance, and accuracy against the Vision One API
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Search Optimizer Agent

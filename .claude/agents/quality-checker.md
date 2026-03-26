@@ -2,13 +2,7 @@
 name: quality-checker
 description: Performs QA checks on assessment data for completeness, accuracy, and anomaly detection
 model: sonnet
-tools:
-  - Read
-  - Write
-  - Edit
-  - Bash
-  - Glob
-  - Grep
+tools: Read, Write, Edit, Bash, Glob, Grep
 ---
 
 # Quality Checker Agent
