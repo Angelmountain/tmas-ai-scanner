@@ -59,7 +59,7 @@ logger = logging.getLogger("run_assessment")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-PAGE_SIZE = 1000  # Records per page (lower = faster server response, avoids 599 timeouts)
+PAGE_SIZE = 5000  # Records per page (max allowed by API)
 MAX_WORKERS = 1   # Sequential execution (prevents OOM from parallel fetches)
 
 # Thread-safe lock for writing JSON lines to stdout
@@ -401,47 +401,56 @@ class VisionOneClient:
                 lt, count_est, num_chunks, chunk_minutes, sel, api_field, (ep_query or "")[:80],
             )
 
+            # Build all chunks
+            chunks = []
             chunk_start = start_dt
-            for chunk_idx in range(num_chunks):
+            while chunk_start < end_dt:
                 chunk_end = min(chunk_start + timedelta(minutes=chunk_minutes), end_dt)
-                if chunk_start >= end_dt:
-                    break
-
-                cs = chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ")
-                ce = chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-                items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
-                chunk_count = len(items)
-                total_records += chunk_count
-
-                # Aggregate on the fly - count by field, discard raw data
-                # For user fields, also check alternate field names across endpoints
-                # (networkActivities uses 'suid', endpointActivities uses 'logonUser')
-                alt_fields = []
-                if api_field == "suid":
-                    alt_fields = ["logonUser", "objectUser"]
-                if api_field and items:
-                    for item in items:
-                        val = item.get(api_field)
-                        if not val:
-                            for af in alt_fields:
-                                val = item.get(af)
-                                if val:
-                                    break
-                        if val:
-                            counts[val] = counts.get(val, 0) + 1
-                elif items:
-                    # No aggregation field - count everything as one bucket
-                    counts["(all)"] = counts.get("(all)", 0) + chunk_count
-
-                # items go out of scope here - memory freed
-
+                chunks.append((
+                    chunk_start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    chunk_end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                ))
                 chunk_start = chunk_end
-                time.sleep(0.5)
+
+            # Run chunks in parallel (5 workers)
+            PARALLEL_CHUNKS = 5
+            alt_fields = ["logonUser", "objectUser"] if api_field == "suid" else []
+
+            def _process_chunk(chunk_times):
+                cs, ce = chunk_times
+                items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
+                # Aggregate locally
+                local_counts = {}
+                for item in items:
+                    val = item.get(api_field) if api_field else None
+                    if not val:
+                        for af in alt_fields:
+                            val = item.get(af)
+                            if val:
+                                break
+                    if val:
+                        local_counts[val] = local_counts.get(val, 0) + 1
+                return len(items), local_counts
+
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            with ThreadPoolExecutor(max_workers=PARALLEL_CHUNKS) as pool:
+                futures = {pool.submit(_process_chunk, c): i for i, c in enumerate(chunks)}
+                done = 0
+                for future in as_completed(futures):
+                    done += 1
+                    chunk_count, local_counts = future.result()
+                    total_records += chunk_count
+                    for k, v in local_counts.items():
+                        counts[k] = counts.get(k, 0) + v
+                    if done % 10 == 0 or done == len(chunks):
+                        logger.info(
+                            "Progress: %d/%d chunks, %d records, %d unique",
+                            done, len(chunks), total_records, len(counts),
+                        )
 
             logger.info(
                 "Completed %s search. %d records, %d unique values from %d chunks.",
-                lt, total_records, len(counts), min(chunk_idx + 1, num_chunks),
+                lt, total_records, len(counts), len(chunks),
             )
 
         return counts, total_records
