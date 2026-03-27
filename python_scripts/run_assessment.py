@@ -421,6 +421,7 @@ class VisionOneClient:
                 items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
                 # Aggregate locally
                 local_counts = {}
+                had_error = False
                 for item in items:
                     val = item.get(api_field) if api_field else None
                     if not val:
@@ -430,27 +431,62 @@ class VisionOneClient:
                                 break
                     if val:
                         local_counts[val] = local_counts.get(val, 0) + 1
-                return len(items), local_counts
+                # Detect partial results (chunk had timeout but got some data)
+                # A full 15/30-min chunk should have ~5K+ records for dense data
+                if count_est > 50000 and len(items) < 1000 and len(items) > 0:
+                    had_error = True
+                if len(items) == 0 and count_est > 10000:
+                    had_error = True
+                return len(items), local_counts, had_error, chunk_times
 
             from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            # Pass 1: parallel fetch
+            failed_chunks = []
             with ThreadPoolExecutor(max_workers=PARALLEL_CHUNKS) as pool:
                 futures = {pool.submit(_process_chunk, c): i for i, c in enumerate(chunks)}
                 done = 0
                 for future in as_completed(futures):
                     done += 1
-                    chunk_count, local_counts = future.result()
+                    chunk_count, local_counts, had_error, chunk_times = future.result()
                     total_records += chunk_count
                     for k, v in local_counts.items():
                         counts[k] = counts.get(k, 0) + v
+                    if had_error:
+                        failed_chunks.append(chunk_times)
                     if done % 10 == 0 or done == len(chunks):
                         logger.info(
                             "Progress: %d/%d chunks, %d records, %d unique",
                             done, len(chunks), total_records, len(counts),
                         )
 
+            # Pass 2: retry failed chunks sequentially (less API pressure)
+            if failed_chunks:
+                logger.info(
+                    "Retrying %d failed chunks sequentially...", len(failed_chunks),
+                )
+                time.sleep(2)  # Brief pause before retry
+                for cs, ce in failed_chunks:
+                    items = self._search_chunk(lt, cs, ce, query=ep_query, select=sel)
+                    for item in items:
+                        val = item.get(api_field) if api_field else None
+                        if not val:
+                            for af in alt_fields:
+                                val = item.get(af)
+                                if val:
+                                    break
+                        if val:
+                            counts[val] = counts.get(val, 0) + 1
+                    total_records += len(items)
+                    time.sleep(1)
+                logger.info(
+                    "Retry pass done. Now %d records, %d unique.",
+                    total_records, len(counts),
+                )
+
             logger.info(
-                "Completed %s search. %d records, %d unique values from %d chunks.",
-                lt, total_records, len(counts), len(chunks),
+                "Completed %s search. %d records, %d unique values from %d chunks (+%d retried).",
+                lt, total_records, len(counts), len(chunks), len(failed_chunks),
             )
 
         return counts, total_records
