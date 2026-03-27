@@ -386,7 +386,7 @@ class VisionOneClient:
             # Pick chunk size based on density
             records_per_hour = count_est / max(duration_hours, 1)
             if records_per_hour > 2000:
-                chunk_minutes = 15  # Dense (>2K/hr): 15 min chunks
+                chunk_minutes = 30  # Dense: 30 min (best coverage in tests)
             elif records_per_hour > 500:
                 chunk_minutes = 60  # Medium: 1 hour
             elif records_per_hour > 100:
